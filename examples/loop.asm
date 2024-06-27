@@ -1,0 +1,29 @@
+	LDR R0 #65
+	LDR R1 #x200
+	LDR R2 #0
+	LDR R3 #4
+	LDR R4 #25
+	LDR R5 #1
+	ADD R6 R0 R4
+
+loop:
+	STI R0 R1 R2
+	ADD R2 R2 R3
+	ADD R0 R0 R5
+	CMP R0 R6
+	JMP LT loop
+	
+	LDR R0 #xA
+	STI R0 R1 R2
+	LDR R0 #x200
+	ADD R4 R4 R5
+	ADD R4 R4 R5
+	MUL R1 R3 R4
+	INT OUT
+	JMP NC return
+
+return:
+	LDR R0 #0
+	INT END
+
+	

@@ -978,10 +978,6 @@ uint8_t run_rom_image(int32_t argc, char** argv){
 }
 
 int main(int32_t argc, char** argv){
-	//char* args[] = {"./vm", "-r", "out.rom"};
-	//return !run_rom_image(3, args);
-	//char* args[] = {"./vm", "-a", "program.asm", "-o", "out.rom"};
-	//return !assembler(5, args);
 	if (argc < 2){
 		printf("Please provide arguments\n-a input.asm -o output.rom\n-r image.rom\n");
 		return 0;
