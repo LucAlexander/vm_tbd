@@ -72,14 +72,14 @@ typedef struct label_assoc{
 	struct label_assoc* other;
 }label_assoc;
 
-#define RAM_SIZE 0x1000
+#define RAM_SIZE 0x10000
 
 static int32_t reg[REGISTER_COUNT];
 static byte ram[RAM_SIZE];
 
-#define ROM_ADDRESS 0x0
-#define ROM_SIZE 0x100
-#define ROM_END ROM_ADDRESS+ROM_SIZE
+#define PROG_ADDRESS 0x0
+#define PROG_SIZE 0x1000
+#define PROG_END PROG_ADDRESS+PROG_SIZE
 
 #define STACK_PUSH(v) ram[reg[ST]--] = v
 #define STACK_POP ram[++reg[ST]]
@@ -112,7 +112,7 @@ void handle_interrupt(byte intr){
 #if (DEBUG==1)
 		printf("END\n");
 #endif
-		reg[PC]=ROM_END;
+		reg[PC]=PROG_END;
 		STACK_PUSH(reg[R0]);
 		return;
 	case KBD:
@@ -369,14 +369,14 @@ void progress(){
 
 void load_rom(uint32_t address, size_t len){
 	for (size_t i = 0;i<len;++i){
-		ram[ROM_ADDRESS+i] = ram[address+i];
+		ram[PROG_ADDRESS+i] = ram[address+i];
 	}
 }
 
 void run_rom(){
-	reg[PC] = ROM_ADDRESS;
+	reg[PC] = PROG_ADDRESS;
 	reg[ST] = RAM_SIZE-1;
-	while (reg[PC] != ROM_END) {
+	while (reg[PC] != PROG_END) {
 		progress();
 	}
 }
@@ -938,7 +938,7 @@ uint8_t assembler(int32_t argc, char** argv){
 	assert_return((argc >= 5) && (strcmp(argv[3], "-o")==0))
 	FILE* fd = fopen(argv[2], "r");
 	assert_return(fd!=NULL)
-	byte encoded[ROM_END-ROM_ADDRESS];
+	byte encoded[PROG_SIZE];
 	label_assoc* label_list = NULL;
 	size_t size = 0;
 	char c;
@@ -966,14 +966,14 @@ uint8_t assembler(int32_t argc, char** argv){
 
 uint8_t run_rom_image(int32_t argc, char** argv){
 #if (DEBUG==1)
-	printf("ROM symbols:\n");
+	printf("symbols:\n");
 #endif
 	assert_return(argc >= 3)
 	FILE* fd = fopen(argv[2], "rb");
 	assert_return(fd!=NULL)
-	byte rom[ROM_SIZE];
-	size_t size = fread(ram+ROM_ADDRESS, sizeof(byte), ROM_SIZE, fd);
-	assert_return(size < ROM_SIZE)
+	byte rom[PROG_SIZE];
+	size_t size = fread(ram+PROG_ADDRESS, sizeof(byte), PROG_SIZE, fd);
+	assert_return(size < PROG_SIZE)
 	run_rom();
 	fclose(fd);
 }
