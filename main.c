@@ -72,16 +72,17 @@ typedef struct label_assoc{
 	struct label_assoc* other;
 }label_assoc;
 
+#define RAM_SIZE 0x1000
+
 static int32_t reg[REGISTER_COUNT];
-static int32_t stack[0x1000];
-static byte ram[0x1000];
+static byte ram[RAM_SIZE];
 
 #define ROM_ADDRESS 0x0
 #define ROM_SIZE 0x100
 #define ROM_END ROM_ADDRESS+ROM_SIZE
 
-#define STACK_PUSH(v) stack[reg[ST]++] = v
-#define STACK_POP stack[--reg[ST]]
+#define STACK_PUSH(v) ram[reg[ST]--] = v
+#define STACK_POP ram[++reg[ST]]
 #define NEXT ram[reg[PC]++]
 #define LOAD (NEXT<<24)+ (NEXT<<16)+ (NEXT<<8)+ (NEXT)
 #define LOAD_ADDRESS (uint32_t)(LOAD)
@@ -374,7 +375,7 @@ void load_rom(uint32_t address, size_t len){
 
 void run_rom(){
 	reg[PC] = ROM_ADDRESS;
-	reg[ST] = 0;
+	reg[ST] = RAM_SIZE-1;
 	while (reg[PC] != ROM_END) {
 		progress();
 	}
