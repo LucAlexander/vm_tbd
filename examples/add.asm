@@ -1,0 +1,22 @@
+	LDR R0 #65
+	PSH R0
+	PSH #x10
+	JMP NC add
+	POP R0
+	LDR R1 #xA
+	STR R0 &x200
+	STR R1 &x204
+	LDR R0 #x200
+	LDR R1 #8
+	INT OUT
+	LDR R0 #0
+	INT END
+
+add:
+	POP R3
+	POP R4
+	POP R5
+	ADD R6 R4 R5
+	PSH R6
+	PSH R3
+	RET

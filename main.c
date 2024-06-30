@@ -158,6 +158,7 @@ void handle_interrupt(byte intr){
 #endif
 	}
 	NEXT;
+	NEXT;
 }
 
 uint8_t check_metric(byte metric){
@@ -406,7 +407,7 @@ void progress(){
 		printf("JMP\n");
 #endif
 		if (check_metric(NEXT & 0x7)){
-			stack_push(reg[PC]);
+			stack_push(reg[PC]+2);
 			reg[PC] = LOAD_ADDRESS;
 			break;
 		}
@@ -415,9 +416,6 @@ void progress(){
 		break;
 	case RET:
 		reg[PC] = stack_pop();
-		NEXT;
-		NEXT;
-		NEXT;
 #if (DEBUG == 1)
 		printf("RET -> %u\n", reg[PC]);
 #endif
@@ -621,7 +619,7 @@ uint8_t parse_STR(FILE* fd, byte* encoded, size_t* const size){
 	assert_return(!err)
 	c = parse_spaces(fd);
 	assert_return(c!=EOF)
-	if (c == '#'){
+	if (c == '&'){
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
 		encoded[(*size)++] = (1<<3) | src;
@@ -634,11 +632,6 @@ uint8_t parse_STR(FILE* fd, byte* encoded, size_t* const size){
 		encoded[(*size)++] = dst;
 		*size += 1;
 	}
-	c = parse_spaces(fd);
-	assert_return(c!=EOF && c=='&')
-	uint32_t address = parse_numeric(fd, &err);
-	assert_return(!err)
-	push_2bytes(encoded, size, address);
 	return 1;
 }
 
@@ -772,6 +765,7 @@ uint8_t parse_PSH(FILE* fd, byte* encoded, size_t* const size){
 	assert_return(c!=EOF)
 	uint8_t err = 0;
 	if (c=='#'){
+		encoded[(*size)++] = 0;
 		int32_t val = parse_numeric(fd, &err);
 		assert_return(!err);
 		push_2bytes(encoded, size, val);
@@ -779,7 +773,7 @@ uint8_t parse_PSH(FILE* fd, byte* encoded, size_t* const size){
 	}
 	byte src = parse_register(fd, c, &err);
 	assert_return(c!=EOF)
-	encoded[(*size)++] = src;
+	encoded[(*size)++] = (1<<3) | src;
 	*size += 2;
 	return 1;
 }
