@@ -24,24 +24,24 @@ enum {
 
 // opcodes
 enum {
+//  OPCODE | 1 BYTE     | 1 BYTE    | 1 BYTE       |
 	NOP=0,
-	LDR,// 0000 m reg, 4 byte address | 4 byte int
-	LDI,// 0 m dst src  (to dereference), 4 byte offset | reg offset
-	STR,// 0000 m reg|000, 4 byte int, 4 byte address
-	STI,// 0 m src dst (to dereference), 4 byte offset | reg offset
-	ADD,//00000 dst, 00 op1 op2
-	MUL,
-	DIV,
-	MOD,
-	ASL,// 00 dst src
-	ASR,
-	LSR,
-	PSH,//00000 reg
-	POP,//00000 reg
-	CMP,//00 op1 op2
-	JMP,//metric byte, 4 byte label
-	RET,// pop to pc
-	INT// byte system interrupt
+	LDR,//  0000 m reg  | 2 byte address or int    |
+	LDI,//  0 m dst src | 2 byte int or reg offset |
+	STR,//  0000 m reg  | 2 byte address or reg    |
+	STI,//  0 m src dst | 2 byte int or reg offset |
+	ADD,//  0 m dst op1 | 2 byte int or reg op2    |
+	MUL,// ...          |                          |
+	DIV,// ...          |                          |
+	MOD,// ...          |                          |
+	LSL,// ...          |                          |
+	LSR,// ...          |                          |
+	PSH,// 0000 m reg   | 2 byte literal           |
+	POP,// 00000 reg    |           |              |
+	CMP,// 00000 op1    | 00000 op2 |              |
+	JMP,// metric byte  | 2 byte label address     |
+	RET,// pop to pc                               |
+	INT//  interrupt    |           |              |
 };
 
 // system interrupts
@@ -81,13 +81,11 @@ static byte ram[RAM_SIZE];
 #define PROG_SIZE 0x1000
 #define PROG_END PROG_ADDRESS+PROG_SIZE
 
-#define STACK_PUSH(v) ram[reg[ST]--] = v
-#define STACK_POP ram[++reg[ST]]
 #define NEXT ram[reg[PC]++]
-#define LOAD (NEXT<<24)+ (NEXT<<16)+ (NEXT<<8)+ (NEXT)
+#define LOAD ((NEXT<<8) + (NEXT))
 #define LOAD_ADDRESS (uint32_t)(LOAD)
 #define LOAD_VALUE (int32_t)(LOAD)
-#define READ(addr) (ram[addr]<<24) + (ram[addr+1]<<16) + (ram[addr+2]<<8) + (ram[addr+3])
+#define READ(addr) ((ram[addr]<<8) + (ram[addr+1]))
 #define READ_ADDRESS(addr) (uint32_t)(READ(addr))
 #define READ_VALUE(addr) (int32_t)(READ(addr))
 #define WRITE(addr, val)\
@@ -95,6 +93,29 @@ static byte ram[RAM_SIZE];
 	ram[addr+1] = (val>>16) & (0xFF);\
 	ram[addr+2] = (val>>8) & (0xFF);\
 	ram[addr+3] = (val) & (0xFF);\
+
+void stack_push(int32_t value){
+	for (uint8_t i = 0;i<4;++i){
+		ram[reg[ST]--] = (value >> (0x8*i)) & 0xFF;
+#if (DEBUG == 1)
+		printf("%u\n", ram[reg[ST]+1]);
+#endif
+	}
+}
+
+int32_t stack_pop(){
+	int32_t v = 0;
+	for (uint8_t i = 0;i<4;++i){
+#if (DEBUG == 1)
+		printf("%u: %u\n", reg[ST]+1, ram[reg[ST]+1]);
+#endif
+		v += ram[++reg[ST]] << (0x8*(3-i));
+	}
+#if (DEBUG == 1)
+		printf("%u\n", v);
+#endif
+	return v;
+}
 
 void to_stdout(){
 	uint32_t n = reg[R1];
@@ -105,7 +126,10 @@ void to_stdout(){
 
 void handle_interrupt(byte intr){
 	for (size_t i = PC;i<REGISTER_COUNT;++i){
-		STACK_PUSH(reg[i]);
+		stack_push(reg[i]);
+#if (DEBUG==1)
+		printf("<- %u (%u)\n", i, reg[i]);
+#endif
 	}
 	switch (intr){
 	case END:
@@ -113,7 +137,7 @@ void handle_interrupt(byte intr){
 		printf("END\n");
 #endif
 		reg[PC]=PROG_END;
-		STACK_PUSH(reg[R0]);
+		stack_push(reg[R0]);
 		return;
 	case KBD:
 #if (DEBUG==1)
@@ -128,8 +152,12 @@ void handle_interrupt(byte intr){
 		break;
 	}
 	for (size_t i = REGISTER_COUNT-1;i>=PC;--i){
-		reg[i] = STACK_POP;
+		reg[i] = stack_pop();
+#if (DEBUG==1)
+		printf("%u <- %u\n", i, reg[i]);
+#endif
 	}
+	NEXT;
 }
 
 uint8_t check_metric(byte metric){
@@ -152,22 +180,20 @@ void progress(){
 	byte opcode = NEXT;
 	switch (opcode){
 	case LDR:
-#if (DEBUG == 1)
-		printf("LDR\n");
-#endif
 		a = NEXT;
 		m = a >> 3;
 		dst = a & 0x7;
 		if (m){
 			reg[dst] = ram[LOAD_ADDRESS];
-			break;
 		}
-		reg[dst] = LOAD_VALUE;
+		else{
+			reg[dst] = LOAD_VALUE;
+		}
+#if (DEBUG == 1)
+		printf("LDR %u <- %u\n", dst, reg[dst]);
+#endif
 		break;
 	case LDI:
-#if (DEBUG == 1)
-		printf("LDI\n");
-#endif
 		a = NEXT;
 		m = a >> 6;
 		dst = (a >> 3) & (0x7);
@@ -177,28 +203,31 @@ void progress(){
 		}
 		else{
 			offset = reg[NEXT];
+			NEXT;
 		}
 		reg[dst] = READ(src_address+offset);
+#if (DEBUG == 1)
+		printf("LDI %u <- %u (%u + %u)\n", dst, reg[dst], src_address, offset);
+#endif
 		break;
 	case STR:
-#if (DEBUG == 1)
-		printf("STR\n");
-#endif
 		a = NEXT;
 		m = a >> 3;
+		src = a & 0x7;
+		dst_address = 0;
 		if (m){
-			src = a & 0x7;
 			dst_address = LOAD_ADDRESS;
-			WRITE(dst_address, reg[src])
-			break;
 		}
-		src_val = LOAD_VALUE;
-		WRITE(LOAD_ADDRESS, src_val)
+		else{
+			dst_address = ram[reg[NEXT]];
+			NEXT;
+		}
+		WRITE(dst_address, reg[src])
+#if (DEBUG == 1)
+		printf("STR %u (%u) -> %u\n", src, reg[src], dst_address);
+#endif
 		break;
 	case STI:
-#if (DEBUG == 1)
-		printf("STI\n");
-#endif
 		a = NEXT;
 		m = a >> 6;
 		src = (a >> 3) & (0x7);
@@ -208,145 +237,190 @@ void progress(){
 		}
 		else{
 			offset = reg[NEXT];
+			NEXT;
 		}
 		WRITE(dst_address+offset, reg[src])
+#if (DEBUG == 1)
+		printf("STI %u (%u) -> %u (%u + %u)\n", src, reg[src], dst_address+offset, dst_address, offset);
+#endif
 		break;
 	case ADD:
-#if (DEBUG == 1)
-		printf("ADD\n");
-#endif
 		a = NEXT;
-		b = NEXT;
-		dst = a & 0x7;
-		op1 = b >> 3;
-		op2 = b & 0x7;
-		reg[dst] = reg[op1]+reg[op2];
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1]+src_val;
 		reg[SR] = ((reg[dst]==0) << 2)
 				   | ((reg[dst] > 0) << 1)
 				   | (0);
+#if (DEBUG == 1)
+		printf("ADD %u (%u) <- %u + %u \n", dst, reg[dst], reg[op1], src_val);
+#endif
 		break;
 	case MUL:
-#if (DEBUG == 1)
-		printf("MUL\n");
-#endif
 		a = NEXT;
-		b = NEXT;
-		dst = a & 0x7;
-		op1 = b >> 3;
-		op2 = b & 0x7;
-		reg[dst] = reg[op1]*reg[op2];
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1]*src_val;
 		reg[SR] = ((reg[dst]==0) << 2)
 				   | ((reg[dst] > 0) << 1)
 				   | (0);
+#if (DEBUG == 1)
+		printf("MUL %u (%u) <- %u * %u \n", dst, reg[dst], reg[op1], src_val);
+#endif
 		break;
 	case DIV:
-#if (DEBUG == 1)
-		printf("DIV\n");
-#endif
 		a = NEXT;
-		b = NEXT;
-		dst = a & 0x7;
-		op1 = b >> 3;
-		op2 = b & 0x7;
-		reg[dst] = reg[op1]/reg[op2];
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1]/src_val;
 		reg[SR] = ((reg[dst]==0) << 2)
 				   | ((reg[dst] > 0) << 1)
 				   | (0);
+#if (DEBUG == 1)
+		printf("DIV %u (%u) <- %u / %u \n", dst, reg[dst], reg[op1], src_val);
+#endif
 		break;
 	case MOD:
-#if (DEBUG == 1)
-		printf("MOD\n");
-#endif
 		a = NEXT;
-		b = NEXT;
-		dst = a & 0x7;
-		op1 = b >> 3;
-		op2 = b & 0x7;
-		reg[dst] = reg[op1]%reg[op2];
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1]%src_val;
 		reg[SR] = ((reg[dst]==0) << 2)
 				   | ((reg[dst] > 0) << 1)
 				   | (0);
+#if (DEBUG == 1)
+		printf("MOD %u (%u) <- %u % %u \n", dst, reg[dst], reg[op1], src_val);
+#endif
 		break;
-	case ASL:
-#if (DEBUG == 1)
-		printf("ASL\n");
-#endif
+	case LSL:
 		a = NEXT;
-		dst = a >> 3;
-		src = a & 0x7;
-		reg[dst] = reg[src] << 1;
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1]<<src_val;
 		reg[SR] = ((reg[dst]==0) << 2)
 				   | ((reg[dst] > 0) << 1)
 				   | (0);
-		break;
-	case ASR:
 #if (DEBUG == 1)
-		printf("ASR\n");
+		printf("LSL %u (%u) <- %u << %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
-		a = NEXT;
-		dst = a >> 3;
-		src = a & 0x7;
-		preserve = reg[src] & 1<<31;
-		reg[dst] = (reg[src] >> 1) | preserve;
-		reg[SR] = ((reg[dst]==0) << 2)
-				   | ((reg[dst] > 0) << 1)
-				   | (0);
 		break;
 	case LSR:
-#if (DEBUG == 1)
-		printf("LSR\n");
-#endif
 		a = NEXT;
-		dst = a >> 3;
-		src = a & 0x7;
-		reg[dst] = reg[src] >> 1;
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1]>>src_val;
 		reg[SR] = ((reg[dst]==0) << 2)
 				   | ((reg[dst] > 0) << 1)
 				   | (0);
+#if (DEBUG == 1)
+		printf("LSR %u (%u) <- %u >> %u \n", dst, reg[dst], reg[op1], src_val);
+#endif
 		break;
 	case PSH:
-#if (DEBUG == 1)
-		printf("PSH\n");
-#endif
 		a = NEXT;
-		src = a & 0x7;
-		STACK_PUSH(reg[src]);
+		m = a > 3;
+		if (m){
+			src_val = reg[a & 0x7];
+			NEXT;
+			NEXT;
+		}
+		else{
+			src_val = LOAD_VALUE;
+		}
+		stack_push(src_val);
+#if (DEBUG == 1)
+		printf("PSH %u\n", src_val);
+#endif
 		break;
 	case POP:
-#if (DEBUG == 1)
-		printf("POP\n");
-#endif
 		a = NEXT;
 		dst = a & 0x7;
-		reg[dst] = STACK_POP;
+		reg[dst] = stack_pop();
+		NEXT;
+		NEXT;
+#if (DEBUG == 1)
+		printf("POP %u <- %u\n", dst, reg[dst]);
+#endif
 		break;
 	case CMP:
-#if (DEBUG == 1)
-		printf("CMP\n");
-#endif
-		a = NEXT;
-		x = reg[a >> 3];
-		y = reg[a & 0x7];
+		x = reg[NEXT];
+		y = reg[NEXT];
 		reg[SR] = ((x==y) << 2)
 				   | ((x>y) << 1)
 				   | (0);
+		NEXT;
+#if (DEBUG == 1)
+		printf("CMP %u =? %u\n", x, y);
+#endif
 		break;
 	case JMP:
 #if (DEBUG == 1)
 		printf("JMP\n");
 #endif
 		if (check_metric(NEXT & 0x7)){
-			STACK_PUSH(reg[PC]);
+			stack_push(reg[PC]);
 			reg[PC] = LOAD_ADDRESS;
 			break;
 		}
-		preserve = LOAD_ADDRESS;// eats the bytes needed to be et
+		NEXT;
+		NEXT;
 		break;
 	case RET:
+		reg[PC] = stack_pop();
+		NEXT;
+		NEXT;
+		NEXT;
 #if (DEBUG == 1)
-		printf("RET\n");
+		printf("RET -> %u\n", reg[PC]);
 #endif
-		reg[PC] = STACK_POP;
 		break;
 	case INT:
 #if (DEBUG == 1)
@@ -358,6 +432,9 @@ void progress(){
 #if (DEBUG == 1)
 		printf("NOP\n");
 #endif
+		NEXT;
+		NEXT;
+		NEXT;
 		break;	  
 	default:
 #if (DEBUG == 1)
@@ -373,10 +450,11 @@ void load_rom(uint32_t address, size_t len){
 	}
 }
 
-void run_rom(){
+void run_rom(uint8_t debug){
 	reg[PC] = PROG_ADDRESS;
 	reg[ST] = RAM_SIZE-1;
 	while (reg[PC] != PROG_END) {
+		if (debug){getc(stdin);}
 		progress();
 	}
 }
@@ -456,17 +534,18 @@ int32_t parse_numeric(FILE* fd, uint8_t* err){
 
 uint8_t parse_NOP(FILE* fd, byte* encoded, size_t* const size){
 	encoded[(*size)++] = NOP;
+	*size += 3;
 #if (DEBUG==1)
 	printf("NOP ");
 #endif
 	return 1;
 }
 
-void push_4bytes(byte* encoded, size_t* const size, uint32_t address){
-		for (uint8_t i = 0;i<4;++i){
-			encoded[(*size)++] = (address >> (32-(8*(i+1)))) & (0xFF);
+void push_2bytes(byte* encoded, size_t* const size, uint32_t address){
+		for (uint8_t i = 0;i<2;++i){
+			encoded[(*size)++] = (address >> ((1-i)*0x8)) & 0xFF;
 #if (DEBUG==1)
-			printf("%u ", (address >> (32-(8*(i+1))))&(0xFF));
+			printf("%u ", (address >> ((1-i)*0x8))&0xFF);
 #endif
 		}
 }
@@ -487,13 +566,13 @@ uint8_t parse_LDR(FILE* const fd, byte* encoded, size_t* const const size){
 		encoded[(*size)++] = r | (1<<3);
 		uint32_t address = parse_numeric(fd, &err);
 		assert_return(!err)
-		push_4bytes(encoded, size, address);
+		push_2bytes(encoded, size, address);
 	}
 	else if (c=='#'){
 		encoded[(*size)++] = r;
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		push_4bytes(encoded, size, value);
+		push_2bytes(encoded, size, value);
 	}
 	return 1;
 }
@@ -518,13 +597,14 @@ uint8_t parse_LDI(FILE* fd, byte* encoded, size_t* const size){
 		int32_t offset = parse_numeric(fd, &err);
 		assert_return(!err)
 		encoded[(*size)++] = (1<<6) | (dst << 3) | src;
-		push_4bytes(encoded, size, offset);
+		push_2bytes(encoded, size, offset);
 	}
 	else{
 		byte off = parse_register(fd, c, &err);
 		assert_return(!err)
 		encoded[(*size)++] = (dst << 3) | src;
 		encoded[(*size)++] = off;
+		*size += 1;
 	}
 	return 1;
 }
@@ -537,22 +617,28 @@ uint8_t parse_STR(FILE* fd, byte* encoded, size_t* const size){
 	char c = parse_spaces(fd);
 	assert_return(c!=EOF)
 	uint8_t err = 0;
+	byte src = parse_register(fd, c, &err);
+	assert_return(!err)
+	c = parse_spaces(fd);
+	assert_return(c!=EOF)
 	if (c == '#'){
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = 0;
-		push_4bytes(encoded, size, value);
+		encoded[(*size)++] = (1<<3) | src;
+		push_2bytes(encoded, size, value);
 	}
 	else{
-		byte src = parse_register(fd, c, &err);
+		byte dst = parse_register(fd, c, &err);
 		assert_return(!err)
-		encoded[(*size)++] = src | (1<<3);
+		encoded[(*size)++] = src;
+		encoded[(*size)++] = dst;
+		*size += 1;
 	}
 	c = parse_spaces(fd);
 	assert_return(c!=EOF && c=='&')
 	uint32_t address = parse_numeric(fd, &err);
 	assert_return(!err)
-	push_4bytes(encoded, size, address);
+	push_2bytes(encoded, size, address);
 	return 1;
 }
 
@@ -576,13 +662,14 @@ uint8_t parse_STI(FILE* fd, byte* encoded, size_t* const size){
 		int32_t offset = parse_numeric(fd, &err);
 		assert_return(!err)
 		encoded[(*size)++] = (1<<6) | (src << 3) | dst;
-		push_4bytes(encoded, size, offset);
+		push_2bytes(encoded, size, offset);
 	}
 	else{
 		byte off = parse_register(fd, c, &err);
 		assert_return(!err)
 		encoded[(*size)++] = (src << 3) | dst;
 		encoded[(*size)++] = off;
+		*size += 1;
 	}
 	return 1;
 }
@@ -592,17 +679,25 @@ uint8_t parse_alu_op(FILE* fd, byte* encoded, size_t* const size){
 	assert_return(c!=EOF)
 	uint8_t err = 0;
 	byte dst = parse_register(fd, c, &err);
-	assert_return(c!=EOF)
+	assert_return(!err)
 	c = parse_spaces(fd);
 	assert_return(c!=EOF)
 	byte op1 = parse_register(fd, c, &err);
-	assert_return(c!=EOF)
+	assert_return(!err)
 	c = parse_spaces(fd);
 	assert_return(c!=EOF)
+	if (c=='#'){
+		int32_t val = parse_numeric(fd, &err);
+		assert_return(!err);
+		encoded[(*size)++] = (1<<6) | (dst<<3) | op1;
+		push_2bytes(encoded, size, val);
+		return 1;
+	}
 	byte op2 = parse_register(fd, c, &err);
-	assert_return(c!=EOF)
-	encoded[(*size)++] = dst;
-	encoded[(*size)++] = (op1<<3) | op2;
+	assert_return(!err)
+	encoded[(*size)++] = (dst<<3) | op1;
+	encoded[(*size)++] = op2;
+	*size += 1;
 	return 1;
 }
 
@@ -652,20 +747,12 @@ uint8_t parse_2_register_byte(FILE* fd, byte* encoded, size_t* const size){
 	return 1;
 }
 
-uint8_t parse_ASL(FILE* fd, byte* encoded, size_t* const size){
+uint8_t parse_LSL(FILE* fd, byte* encoded, size_t* const size){
 #if (DEBUG==1)
-	printf("ASL ");
+	printf("LSL ");
 #endif
-	encoded[(*size)++] = ASL;
-	return parse_2_register_byte(fd, encoded, size);
-}
-
-uint8_t parse_ASR(FILE* fd, byte* encoded, size_t* const size){
-#if (DEBUG==1)
-	printf("ASR ");
-#endif
-	encoded[(*size)++] = ASR;
-	return parse_2_register_byte(fd, encoded, size);
+	encoded[(*size)++] = LSL;
+	return parse_alu_op(fd, encoded, size);
 }
 
 uint8_t parse_LSR(FILE* fd, byte* encoded, size_t* const size){
@@ -673,7 +760,7 @@ uint8_t parse_LSR(FILE* fd, byte* encoded, size_t* const size){
 	printf("LSR ");
 #endif
 	encoded[(*size)++] = LSR;
-	return parse_2_register_byte(fd, encoded, size);
+	return parse_alu_op(fd, encoded, size);
 }
 
 uint8_t parse_PSH(FILE* fd, byte* encoded, size_t* const size){
@@ -684,9 +771,16 @@ uint8_t parse_PSH(FILE* fd, byte* encoded, size_t* const size){
 	char c = parse_spaces(fd);
 	assert_return(c!=EOF)
 	uint8_t err = 0;
+	if (c=='#'){
+		int32_t val = parse_numeric(fd, &err);
+		assert_return(!err);
+		push_2bytes(encoded, size, val);
+		return 1;
+	}
 	byte src = parse_register(fd, c, &err);
 	assert_return(c!=EOF)
 	encoded[(*size)++] = src;
+	*size += 2;
 	return 1;
 }
 
@@ -699,8 +793,9 @@ uint8_t parse_POP(FILE* fd, byte* encoded, size_t* const size){
 	assert_return(c!=EOF)
 	uint8_t err = 0;
 	byte src = parse_register(fd, c, &err);
-	assert_return(c!=EOF)
+	assert_return((c!=EOF) && (!err))
 	encoded[(*size)++] = src;
+	*size += 2;
 	return 1;
 }
 
@@ -709,7 +804,19 @@ uint8_t parse_CMP(FILE* fd, byte* encoded, size_t* const size){
 	printf("CMP ");
 #endif
 	encoded[(*size)++] = CMP;
-	return parse_2_register_byte(fd, encoded, size);
+	char c = parse_spaces(fd);
+	assert_return(c!=EOF)
+	uint8_t err = 0;
+	byte op1 = parse_register(fd, c, &err);
+	assert_return((c!=EOF) && (!err))
+	c = parse_spaces(fd);
+	assert_return(c!=EOF)
+	byte op2 = parse_register(fd, c, &err);
+	assert_return((c!=EOF) && (!err))
+	encoded[(*size)++] = op1;
+	encoded[(*size)++] = op2;
+	*size += 1;
+	return 1;
 }
 
 #define MATCH_METRIC(tok) if (strcmp(#tok, op)==0){ encoded[(*size)++] = tok; } else
@@ -786,7 +893,7 @@ uint8_t parse_JMP(FILE* fd, byte* encoded, size_t* const size, label_assoc** lab
 	assert_return(whitespace(c));
 	lab[i] = '\0';
 	uint32_t label = seek_jump_label(labels, lab, *size);
-	push_4bytes(encoded, size, label);
+	push_2bytes(encoded, size, label);
 	return 1;
 }
 
@@ -795,6 +902,7 @@ uint8_t parse_RET(FILE* fd, byte* encoded, size_t* const size){
 	printf("RET ");
 #endif
 	encoded[(*size)++] = RET;
+	*size += 3;
 	return 1;
 }
 
@@ -819,6 +927,7 @@ uint8_t parse_interrupt(FILE* fd, char c, byte* encoded, size_t* const size){
 #endif
 		encoded[(*size)++]=END;
 	}
+	*size += 2;
 	return 1;
 
 }
@@ -848,8 +957,8 @@ label_assoc* match_label(label_assoc* labels, char* lab, size_t ip, byte* encode
 		new->other = NULL;
 		new->next = labels;
 		do{
-			for (size_t i = 0;i<4;++i){
-				encoded[head->v+i] = ip >> (32-((i+1)*8)) & (0xFF);
+			for (size_t i = 0;i<2;++i){
+				encoded[head->v+i] = ip >> ((1-i)*0x8) & 0xFF;
 			}
 			head = head->other;
 		} while (head != NULL);
@@ -883,6 +992,7 @@ uint8_t parse_label(FILE* fd, char c, byte* encoded, size_t* const size, char* o
 	*labels = match_label(*labels, label, *size, encoded, &err);
 	assert_return(!err)
 	encoded[(*size)++] = NOP;
+	*size += 3;
 	return 1;
 }
 
@@ -905,8 +1015,7 @@ uint8_t parse_opcode(FILE* fd, char c, byte* encoded, size_t* const size, label_
 	MATCH_OPCODE(MUL)
 	MATCH_OPCODE(DIV)
 	MATCH_OPCODE(MOD)
-	MATCH_OPCODE(ASL)
-	MATCH_OPCODE(ASR)
+	MATCH_OPCODE(LSL)
 	MATCH_OPCODE(LSR)
 	MATCH_OPCODE(PSH)
 	MATCH_OPCODE(POP)
@@ -938,7 +1047,7 @@ uint8_t assembler(int32_t argc, char** argv){
 	assert_return((argc >= 5) && (strcmp(argv[3], "-o")==0))
 	FILE* fd = fopen(argv[2], "r");
 	assert_return(fd!=NULL)
-	byte encoded[PROG_SIZE];
+	byte encoded[PROG_SIZE] = {0};
 	label_assoc* label_list = NULL;
 	size_t size = 0;
 	char c;
@@ -956,6 +1065,9 @@ uint8_t assembler(int32_t argc, char** argv){
 	free_label_assoc(label_list);
 	for (size_t i = 0;i<size;++i){
 		printf("%.2x ", encoded[i]);
+		if (i%4 == 3){
+			printf("\n");
+		}
 	}
 	printf("\n");
 	FILE* outfile = fopen(argv[4], "w");
@@ -974,7 +1086,13 @@ uint8_t run_rom_image(int32_t argc, char** argv){
 	byte rom[PROG_SIZE];
 	size_t size = fread(ram+PROG_ADDRESS, sizeof(byte), PROG_SIZE, fd);
 	assert_return(size < PROG_SIZE)
-	run_rom();
+	uint8_t debug = 0;
+	if (argc >= 4){
+		if (strcmp(argv[3], "-g")==0){
+			debug = 1;
+		}
+	}
+	run_rom(debug);
 	fclose(fd);
 }
 
