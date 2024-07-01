@@ -31,17 +31,21 @@ enum {
 	STR,//  0000 m reg  | 2 byte address or reg    |
 	STI,//  0 m src dst | 2 byte int or reg offset |
 	ADD,//  0 m dst op1 | 2 byte int or reg op2    |
-	MUL,// ...          |                          |
-	DIV,// ...          |                          |
-	MOD,// ...          |                          |
-	LSL,// ...          |                          |
-	LSR,// ...          |                          |
-	PSH,// 0000 m reg   | 2 byte literal           |
-	POP,// 00000 reg    |           |              |
-	CMP,// 00000 op1    | 00000 op2 |              |
-	JMP,// metric byte  | 2 byte label address     |
-	RET,// pop to pc                               |
-	INT//  interrupt    |           |              |
+	MUL,//  ...         | ...                      |
+	DIV,//  ...         | ...                      |
+	MOD,//  ...         | ...                      |
+	LSL,//  ...         | ...                      |
+	LSR,//  ...         | ...                      |
+	AND,//  ...         | ...                      |
+	ORR,//  ...         | ...                      |
+	XOR,//  ...         | ...                      |
+	COM,//  0000 m reg  | 2 byte literal or reg    |
+	PSH,//  0000 m reg  | 2 byte literal           |
+	POP,//  00000 reg   |           |              |
+	CMP,//  00000 op1   | 00000 op2 |              |
+	JMP,//  metric byte | 2 byte label address     |
+	RET,//  pop to pc                              |
+	INT//   interrupt   |           |              |
 };
 
 // system interrupts
@@ -174,6 +178,12 @@ uint8_t check_metric(byte metric){
 	return 0;
 }
 
+void set_status(int32_t val){
+	reg[SR] = ((val==0) << 2)
+			| (val > 0)
+			| (0);
+}
+
 void progress(){
 	byte a, b, m, src, dst, op1, op2;
 	int32_t offset, src_val, x, y;
@@ -258,9 +268,7 @@ void progress(){
 			NEXT;
 		}
 		reg[dst] = reg[op1]+src_val;
-		reg[SR] = ((reg[dst]==0) << 2)
-				   | ((reg[dst] > 0) << 1)
-				   | (0);
+		set_status(reg[dst]);
 #if (DEBUG == 1)
 		printf("ADD %u (%u) <- %u + %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
@@ -278,9 +286,7 @@ void progress(){
 			NEXT;
 		}
 		reg[dst] = reg[op1]*src_val;
-		reg[SR] = ((reg[dst]==0) << 2)
-				   | ((reg[dst] > 0) << 1)
-				   | (0);
+		set_status(reg[dst]);
 #if (DEBUG == 1)
 		printf("MUL %u (%u) <- %u * %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
@@ -298,9 +304,7 @@ void progress(){
 			NEXT;
 		}
 		reg[dst] = reg[op1]/src_val;
-		reg[SR] = ((reg[dst]==0) << 2)
-				   | ((reg[dst] > 0) << 1)
-				   | (0);
+		set_status(reg[dst]);
 #if (DEBUG == 1)
 		printf("DIV %u (%u) <- %u / %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
@@ -318,9 +322,7 @@ void progress(){
 			NEXT;
 		}
 		reg[dst] = reg[op1]%src_val;
-		reg[SR] = ((reg[dst]==0) << 2)
-				   | ((reg[dst] > 0) << 1)
-				   | (0);
+		set_status(reg[dst]);
 #if (DEBUG == 1)
 		printf("MOD %u (%u) <- %u % %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
@@ -338,9 +340,7 @@ void progress(){
 			NEXT;
 		}
 		reg[dst] = reg[op1]<<src_val;
-		reg[SR] = ((reg[dst]==0) << 2)
-				   | ((reg[dst] > 0) << 1)
-				   | (0);
+		set_status(reg[dst]);
 #if (DEBUG == 1)
 		printf("LSL %u (%u) <- %u << %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
@@ -358,12 +358,69 @@ void progress(){
 			NEXT;
 		}
 		reg[dst] = reg[op1]>>src_val;
-		reg[SR] = ((reg[dst]==0) << 2)
-				   | ((reg[dst] > 0) << 1)
-				   | (0);
+		set_status(reg[dst]);
 #if (DEBUG == 1)
 		printf("LSR %u (%u) <- %u >> %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
+		break;
+	case AND:
+		a = NEXT;
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1] & src_val;
+		set_status(reg[dst]);
+		break;
+	case ORR:
+		a = NEXT;
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1] | src_val;
+		set_status(reg[dst]);
+		break;
+	case XOR:
+		a = NEXT;
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1] ^ src_val;
+		set_status(reg[dst]);
+		break;
+	case COM:
+		a = NEXT;
+		m = a >> 3;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD_VALUE;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[op1] = ~src_val;
+		set_status(reg[op1]);
 		break;
 	case PSH:
 		a = NEXT;
@@ -756,6 +813,57 @@ uint8_t parse_LSR(FILE* fd, byte* encoded, size_t* const size){
 	return parse_alu_op(fd, encoded, size);
 }
 
+uint8_t parse_AND(FILE* fd, byte* encoded, size_t* const size){
+#if (DEBUG==1)
+	printf("AND ");
+#endif
+	encoded[(*size)++] = AND;
+	return parse_alu_op(fd, encoded, size);
+}
+
+uint8_t parse_ORR(FILE* fd, byte* encoded, size_t* const size){
+#if (DEBUG==1)
+	printf("ORR ");
+#endif
+	encoded[(*size)++] = ORR;
+	return parse_alu_op(fd, encoded, size);
+}
+
+uint8_t parse_XOR(FILE* fd, byte* encoded, size_t* const size){
+#if (DEBUG==1)
+	printf("XOR ");
+#endif
+	encoded[(*size)++] = XOR;
+	return parse_alu_op(fd, encoded, size);
+}
+
+uint8_t parse_COM(FILE* fd, byte* encoded, size_t* const size){
+#if (DEBUG==1)
+	printf("COM ");
+#endif
+	encoded[(*size)++] = COM;
+	char c = parse_spaces(fd);
+	uint8_t err = 0;
+	assert_return(c!=EOF)
+	byte dst = parse_register(fd, c, &err);
+	assert_return(!err)
+	c = parse_spaces(fd);
+	assert_return(c!= EOF)
+	if (c=='#'){
+		encoded[(*size)++] = (1<<3) | dst;
+		int32_t val = parse_numeric(fd, &err);
+		assert_return(!err)
+		push_2bytes(encoded, size, val);
+		return 1;
+	}
+	encoded[(*size)++] = dst;
+	byte src = parse_register(fd, c, &err);
+	assert_return(!err)
+	encoded[(*size)++] = src;
+	*size += 1;
+	return 1;
+}
+
 uint8_t parse_PSH(FILE* fd, byte* encoded, size_t* const size){
 #if (DEBUG==1)
 	printf("PSH ");
@@ -772,7 +880,7 @@ uint8_t parse_PSH(FILE* fd, byte* encoded, size_t* const size){
 		return 1;
 	}
 	byte src = parse_register(fd, c, &err);
-	assert_return(c!=EOF)
+	assert_return(!err)
 	encoded[(*size)++] = (1<<3) | src;
 	*size += 2;
 	return 1;
@@ -1011,6 +1119,10 @@ uint8_t parse_opcode(FILE* fd, char c, byte* encoded, size_t* const size, label_
 	MATCH_OPCODE(MOD)
 	MATCH_OPCODE(LSL)
 	MATCH_OPCODE(LSR)
+	MATCH_OPCODE(AND)
+	MATCH_OPCODE(ORR)
+	MATCH_OPCODE(XOR)
+	MATCH_OPCODE(COM)
 	MATCH_OPCODE(PSH)
 	MATCH_OPCODE(POP)
 	MATCH_OPCODE(CMP)
