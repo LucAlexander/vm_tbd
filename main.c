@@ -67,6 +67,7 @@ enum {
 };
 
 typedef uint8_t byte;
+typedef uint32_t word;
 
 typedef struct label_assoc{
 	enum{LABEL_MATCH, LABEL_NEED} tag;
@@ -78,7 +79,7 @@ typedef struct label_assoc{
 
 #define RAM_SIZE 0x10000
 
-static int32_t reg[REGISTER_COUNT];
+static word reg[REGISTER_COUNT];
 static byte ram[RAM_SIZE];
 
 #define PROG_ADDRESS 0x0
@@ -87,18 +88,14 @@ static byte ram[RAM_SIZE];
 
 #define NEXT ram[reg[PC]++]
 #define LOAD ((NEXT<<8) + (NEXT))
-#define LOAD_ADDRESS (uint32_t)(LOAD)
-#define LOAD_VALUE (int32_t)(LOAD)
 #define READ(addr) ((ram[addr]<<8) + (ram[addr+1]))
-#define READ_ADDRESS(addr) (uint32_t)(READ(addr))
-#define READ_VALUE(addr) (int32_t)(READ(addr))
 #define WRITE(addr, val)\
 	ram[addr] = (val>>24) & (0xFF);\
 	ram[addr+1] = (val>>16) & (0xFF);\
 	ram[addr+2] = (val>>8) & (0xFF);\
 	ram[addr+3] = (val) & (0xFF);\
 
-void stack_push(int32_t value){
+void stack_push(word value){
 	for (uint8_t i = 0;i<4;++i){
 		ram[reg[ST]--] = (value >> (0x8*i)) & 0xFF;
 #if (DEBUG == 1)
@@ -107,8 +104,8 @@ void stack_push(int32_t value){
 	}
 }
 
-int32_t stack_pop(){
-	int32_t v = 0;
+word stack_pop(){
+	word v = 0;
 	for (uint8_t i = 0;i<4;++i){
 #if (DEBUG == 1)
 		printf("%u: %u\n", reg[ST]+1, ram[reg[ST]+1]);
@@ -122,7 +119,7 @@ int32_t stack_pop(){
 }
 
 void to_stdout(){
-	uint32_t n = reg[R1];
+	word n = reg[R1];
 	for (uint32_t i=0;i<n;++i){
 		putchar(ram[reg[R0]+i]);
 	}
@@ -178,7 +175,7 @@ uint8_t check_metric(byte metric){
 	return 0;
 }
 
-void set_status(int32_t val){
+void set_status(word val){
 	reg[SR] = ((val==0) << 2)
 			| (val > 0)
 			| (0);
@@ -187,7 +184,7 @@ void set_status(int32_t val){
 void progress(){
 	byte a, b, m, src, dst, op1, op2;
 	int32_t offset, src_val, x, y;
-	uint32_t src_address, dst_address, preserve;
+	word src_address, dst_address, preserve;
 	byte opcode = NEXT;
 	switch (opcode){
 	case LDR:
@@ -195,10 +192,10 @@ void progress(){
 		m = a >> 3;
 		dst = a & 0x7;
 		if (m){
-			reg[dst] = ram[LOAD_ADDRESS];
+			reg[dst] = ram[LOAD];
 		}
 		else{
-			reg[dst] = LOAD_VALUE;
+			reg[dst] = LOAD;
 		}
 #if (DEBUG == 1)
 		printf("LDR %u <- %u\n", dst, reg[dst]);
@@ -210,7 +207,7 @@ void progress(){
 		dst = (a >> 3) & (0x7);
 		src_address = ram[reg[a & 0x7]];
 		if (m){
-			offset = LOAD_VALUE;
+			offset = LOAD;
 		}
 		else{
 			offset = reg[NEXT];
@@ -227,7 +224,7 @@ void progress(){
 		src = a & 0x7;
 		dst_address = 0;
 		if (m){
-			dst_address = LOAD_ADDRESS;
+			dst_address = LOAD;
 		}
 		else{
 			dst_address = ram[reg[NEXT]];
@@ -244,7 +241,7 @@ void progress(){
 		src = (a >> 3) & (0x7);
 		dst_address = reg[a & 0x7];
 		if (m){
-			offset = LOAD_VALUE;
+			offset = LOAD;
 		}
 		else{
 			offset = reg[NEXT];
@@ -261,7 +258,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -279,7 +276,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -297,7 +294,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -315,7 +312,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -333,7 +330,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -351,7 +348,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -369,7 +366,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -384,7 +381,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -399,7 +396,7 @@ void progress(){
 		dst = (a >> 3) & 0x7;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -413,7 +410,7 @@ void progress(){
 		m = a >> 3;
 		op1 = a & 0x7;
 		if (m){
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		else{
 			src_val = reg[NEXT];
@@ -431,7 +428,7 @@ void progress(){
 			NEXT;
 		}
 		else{
-			src_val = LOAD_VALUE;
+			src_val = LOAD;
 		}
 		stack_push(src_val);
 #if (DEBUG == 1)
@@ -465,7 +462,7 @@ void progress(){
 #endif
 		if (check_metric(NEXT & 0x7)){
 			stack_push(reg[PC]+2);
-			reg[PC] = LOAD_ADDRESS;
+			reg[PC] = LOAD;
 			break;
 		}
 		NEXT;
@@ -499,7 +496,7 @@ void progress(){
 	}
 }
 
-void load_rom(uint32_t address, size_t len){
+void load_rom(word address, size_t len){
 	for (size_t i = 0;i<len;++i){
 		ram[PROG_ADDRESS+i] = ram[address+i];
 	}
@@ -596,7 +593,7 @@ uint8_t parse_NOP(FILE* fd, byte* encoded, size_t* const size){
 	return 1;
 }
 
-void push_2bytes(byte* encoded, size_t* const size, uint32_t address){
+void push_2bytes(byte* encoded, size_t* const size, word address){
 		for (uint8_t i = 0;i<2;++i){
 			encoded[(*size)++] = (address >> ((1-i)*0x8)) & 0xFF;
 #if (DEBUG==1)
@@ -619,7 +616,7 @@ uint8_t parse_LDR(FILE* const fd, byte* encoded, size_t* const const size){
 	assert_return(c!=EOF)
 	if (c=='&'){
 		encoded[(*size)++] = r | (1<<3);
-		uint32_t address = parse_numeric(fd, &err);
+		word address = parse_numeric(fd, &err);
 		assert_return(!err)
 		push_2bytes(encoded, size, address);
 	}
@@ -994,7 +991,7 @@ uint8_t parse_JMP(FILE* fd, byte* encoded, size_t* const size, label_assoc** lab
 	}
 	assert_return(whitespace(c));
 	lab[i] = '\0';
-	uint32_t label = seek_jump_label(labels, lab, *size);
+	word label = seek_jump_label(labels, lab, *size);
 	push_2bytes(encoded, size, label);
 	return 1;
 }
