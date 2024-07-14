@@ -16,6 +16,7 @@ Run the program rom with `-r output.rom`
 	| STI | 0 m src dst | 2 byte int or reg offset |
     |-----+-------------+--------------------------|
 	| ADD | 0 m dst op1 | 2 byte int or reg op2    |
+	| SUB | ...         | ...                      |
 	| MUL | ...         | ...                      |
 	| DIV | ...         | ...                      |
     | MOD | ...         | ...                      |
