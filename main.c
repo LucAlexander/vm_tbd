@@ -31,6 +31,7 @@ enum {
 	STR,//  0000 m reg  | 2 byte address or reg    |
 	STI,//  0 m src dst | 2 byte int or reg offset |
 	ADD,//  0 m dst op1 | 2 byte int or reg op2    |
+	SUB,//  ...         | ...                      |
 	MUL,//  ...         | ...                      |
 	DIV,//  ...         | ...                      |
 	MOD,//  ...         | ...                      |
@@ -268,6 +269,24 @@ void progress(){
 		set_status(reg[dst]);
 #if (DEBUG == 1)
 		printf("ADD %u (%u) <- %u + %u \n", dst, reg[dst], reg[op1], src_val);
+#endif
+		break;
+	case SUB:
+		a = NEXT;
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		op1 = a & 0x7;
+		if (m){
+			src_val = LOAD;
+		}
+		else{
+			src_val = reg[NEXT];
+			NEXT;
+		}
+		reg[dst] = reg[op1]-src_val;
+		set_status(reg[dst]);
+#if (DEBUG == 1)
+		printf("SUB %u (%u) <- %u - %u \n", dst, reg[dst], reg[op1], src_val);
 #endif
 		break;
 	case MUL:
@@ -756,6 +775,14 @@ uint8_t parse_ADD(FILE* fd, byte* encoded, size_t* const size){
 	return parse_alu_op(fd, encoded, size);
 }
 
+uint8_t parse_SUB(FILE* fd, byte* encoded, size_t* const size){
+	encoded[(*size)++] = SUB;
+#if (DEBUG==1)
+	printf("SUB ");
+#endif
+	return parse_alu_op(fd, encoded, size);
+}
+
 uint8_t parse_MUL(FILE* fd, byte* encoded, size_t* const size){
 #if (DEBUG==1)
 	printf("MUL ");
@@ -1111,6 +1138,7 @@ uint8_t parse_opcode(FILE* fd, char c, byte* encoded, size_t* const size, label_
 	MATCH_OPCODE(STR)
 	MATCH_OPCODE(STI)
 	MATCH_OPCODE(ADD)
+	MATCH_OPCODE(SUB)
 	MATCH_OPCODE(MUL)
 	MATCH_OPCODE(DIV)
 	MATCH_OPCODE(MOD)
