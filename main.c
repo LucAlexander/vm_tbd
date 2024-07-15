@@ -528,6 +528,7 @@ void run_rom(uint8_t debug){
 		if (debug){getc(stdin);}
 		progress();
 	}
+	printf("INFO rom exited with code %x\n", stack_pop());
 }
 
 #define assert_return(cond) if (!(cond)) {printf("assertion " #cond " failed at %u\n",__LINE__);return 0;}
@@ -569,6 +570,7 @@ byte parse_register(FILE* fd, char c, uint8_t* err){
 	MATCH_REGISTER(R5)
 	MATCH_REGISTER(R6)
 	MATCH_REGISTER(R7)
+	MATCH_REGISTER(ST)
 	MATCH_REGISTER(SR)
 	{
 		*err = 1;
@@ -1122,9 +1124,19 @@ uint8_t parse_label(FILE* fd, char c, byte* encoded, size_t* const size, char* o
 	return 1;
 }
 
+uint8_t parse_comment(FILE* fd, char c){
+	while (c != EOF && c != '\n'){
+		c = fgetc(fd);
+	}
+	return c != EOF;
+}
+
 #define MATCH_OPCODE(tok) if (strcmp(#tok, op) == 0){ return parse_##tok(fd, encoded, size); } else
 
 uint8_t parse_opcode(FILE* fd, char c, byte* encoded, size_t* const size, label_assoc** labels){
+	if (c==';'){
+		return parse_comment(fd, c);
+	}
 	char op[] = "...";
 	uint8_t i = 0;
 	while (c != EOF && i < 3){
