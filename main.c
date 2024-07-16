@@ -28,8 +28,10 @@ enum {
 	NOP=0,
 	LDR,//  0000 m reg  | 2 byte address or int    |
 	LDI,//  0 m dst src | 2 byte int or reg offset |
+	LDW,//  0 m dst src | 2 byte int or reg offset |
 	STR,//  0000 m reg  | 2 byte address or reg    |
 	STI,//  0 m src dst | 2 byte int or reg offset |
+	STB,//  0 m src dst | 2 byte int or reg offset |
 	ADD,//  0 m dst op1 | 2 byte int or reg op2    |
 	SUB,//  ...         | ...                      |
 	MUL,//  ...         | ...                      |
@@ -95,6 +97,13 @@ static byte ram[RAM_SIZE];
 	ram[addr+1] = (val>>16) & (0xFF);\
 	ram[addr+2] = (val>>8) & (0xFF);\
 	ram[addr+3] = (val) & (0xFF);\
+
+#define LOAD_WORD(r, addr)\
+	reg[r] = ((ram[addr] << 24)\
+           | (ram[addr+1] << 16)\
+           | (ram[addr+2] << 8)\
+           | (ram[addr+3]));\
+
 
 void stack_push(word value){
 	for (uint8_t i = 0;i<4;++i){
@@ -202,6 +211,23 @@ void progress(){
 		printf("LDR %u <- %u\n", dst, reg[dst]);
 #endif
 		break;
+	case LDW:
+		a = NEXT;
+		m = a >> 6;
+		dst = (a >> 3) & 0x7;
+		src_address = ram[reg[a&0x7]];
+		if (m){
+			offset = LOAD;
+		}
+		else{
+			offset = reg[NEXT];
+			NEXT;
+		}
+		LOAD_WORD(dst, src_address)
+#if (DEBUG == 1)
+		printf("LDW %u <- %u (%u + %u)\n", dst, reg[dst], src_address, offset);
+#endif
+		break;
 	case LDI:
 		a = NEXT;
 		m = a >> 6;
@@ -251,6 +277,23 @@ void progress(){
 		WRITE(dst_address+offset, reg[src])
 #if (DEBUG == 1)
 		printf("STI %u (%u) -> %u (%u + %u)\n", src, reg[src], dst_address+offset, dst_address, offset);
+#endif
+		break;
+	case STB:
+		a = NEXT;
+		m = a >> 6;
+		src = (a >> 3) & (0x7);
+		dst_address = reg[a & 0x7];
+		if (m){
+			offset = LOAD;
+		}
+		else{
+			offset = reg[NEXT];
+			NEXT;
+		}
+		ram[dst_address+offset] = reg[src] & 0xFF;
+#if (DEBUG == 1)
+		printf("STB %u (%u) -> %u (%u + %u)\n", src, reg[src]&0xFF, dst_address+offset, dst_address, offset);
 #endif
 		break;
 	case ADD:
