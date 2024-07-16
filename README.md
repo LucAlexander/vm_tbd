@@ -12,8 +12,10 @@ Run the program rom with `-r output.rom`
 	| NOP |             |           |              |
 	| LDR | 0000 m reg  | 2 byte address or int    |
 	| LDI | 0 m dst src | 2 byte int or reg offset |
+	| LDW | 0 m dst src | 2 byte int or reg offset |
 	| STR | 0000 m reg  | 2 byte address or reg    |
 	| STI | 0 m src dst | 2 byte int or reg offset |
+	| STB | 0 m src dst | 2 byte int or reg offset |
     |-----+-------------+--------------------------|
 	| ADD | 0 m dst op1 | 2 byte int or reg op2    |
 	| SUB | ...         | ...                      |
