@@ -1,0 +1,11 @@
+	LDW	R0	#x4142
+	LSL	R0	R0	#x10
+	ORR	R0	R0	#x430A
+	STR	R0	&x200
+	LDW	R0	#x200
+	LDW	R1	#4
+	INT	OUT
+	LDW	R0	#1
+	INT	END
+	
+

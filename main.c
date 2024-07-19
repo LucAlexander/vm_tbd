@@ -24,31 +24,38 @@ enum {
 
 // opcodes
 enum {
-//  OPCODE | 1 BYTE     | 1 BYTE    | 1 BYTE       |
+//  OPCODE | 1 BYTE     | 1 BYTE    | 1 BYTE     |
 	NOP=0,
-	LDR,//  0000 m reg  | 2 byte address or int    |
-	LDI,//  0 m dst src | 2 byte int or reg offset |
-	LDW,//  0 m dst src | 2 byte int or reg offset |
-	STR,//  0000 m reg  | 2 byte address or reg    |
-	STI,//  0 m src dst | 2 byte int or reg offset |
-	STB,//  0 m src dst | 2 byte int or reg offset |
-	ADD,//  0 m dst op1 | 2 byte int or reg op2    |
-	SUB,//  ...         | ...                      |
-	MUL,//  ...         | ...                      |
-	DIV,//  ...         | ...                      |
-	MOD,//  ...         | ...                      |
-	LSL,//  ...         | ...                      |
-	LSR,//  ...         | ...                      |
-	AND,//  ...         | ...                      |
-	ORR,//  ...         | ...                      |
-	XOR,//  ...         | ...                      |
-	COM,//  0000 m reg  | 2 byte literal or reg    |
-	PSH,//  0000 m reg  | 2 byte literal           |
-	POP,//  00000 reg   |           |              |
-	CMP,//  00000 op1   | 00000 op2 |              |
-	JMP,//  metric byte | 2 byte label address     |
-	RET,//  pop to pc                              |
-	INT//   interrupt   |           |              |
+	LDW,//  00  dst src | 00000 ofs |            |
+		//  01  dst src | 2 byte ofs literal     |
+		//  10  dst     | 2 byte src address     |
+		//  11  dst     | 2 byte src literal     |
+	LDB,//  00  dst src | 00000 ofs |            |
+		//  01  dst src | 2 byte ofs literal     |
+		//  10  dst     | 2 byte src address     |
+	STR,//  00  src dst | 00000 ofs |            |
+		//  01  src dst | 2 byte ofs literal     |
+		//  10  src     | 2 byte dst address     |
+	STB,//  00  src dst | 00000 ofs |            |
+		//  01  src dst | 2 byte ofs literal     |
+		//  10  src     | 2 byte dst address     |
+	ADD,//  0 m dst op1 | 2 byte int or reg op2  |
+	SUB,//  ...         | ...                    |
+	MUL,//  ...         | ...                    |
+	DIV,//  ...         | ...                    |
+	MOD,//  ...         | ...                    |
+	LSL,//  ...         | ...                    |
+	LSR,//  ...         | ...                    |
+	AND,//  ...         | ...                    |
+	ORR,//  ...         | ...                    |
+	XOR,//  ...         | ...                    |
+	COM,//  0000 m reg  | 2 byte literal or reg  |
+	PSH,//  0000 m reg  | 2 byte literal         |
+	POP,//  00000 reg   |           |            |
+	CMP,//  00000 op1   | 00000 op2 |            |
+	JMP,//  metric byte | 2 byte label address   |
+	RET,//  pop to pc                            |
+	INT//   interrupt   |           |            |
 };
 
 // system interrupts
@@ -197,103 +204,94 @@ void progress(){
 	word src_address, dst_address, preserve;
 	byte opcode = NEXT;
 	switch (opcode){
-	case LDR:
-		a = NEXT;
-		m = a >> 3;
-		dst = a & 0x7;
-		if (m){
-			reg[dst] = ram[LOAD];
-		}
-		else{
-			reg[dst] = LOAD;
-		}
-#if (DEBUG == 1)
-		printf("LDR %u <- %u\n", dst, reg[dst]);
-#endif
-		break;
 	case LDW:
 		a = NEXT;
-		m = a >> 6;
-		dst = (a >> 3) & 0x7;
-		src_address = ram[reg[a&0x7]];
-		if (m){
-			offset = LOAD;
-		}
-		else{
-			offset = reg[NEXT];
+		m = (a>>6) & 0x3;
+		dst = (a>>3) & 0x7;
+		switch(m){
+		case 0:
+			src_address = reg[a & 0x7] + reg[(NEXT) & 0x7];
+			LOAD_WORD(dst, src_address)
 			NEXT;
+			break;
+		case 1:
+			src_address = reg[a & 0x7]+(LOAD);
+			LOAD_WORD(dst, src_address)
+			break;
+		case 2:
+			src_address = ram[LOAD];
+			LOAD_WORD(dst, src_address)
+			break;
+		case 3:
+			reg[dst] = LOAD;
+			break;
 		}
-		LOAD_WORD(dst, src_address)
 #if (DEBUG == 1)
-		printf("LDW %u <- %u (%u + %u)\n", dst, reg[dst], src_address, offset);
+		printf("LDW %u <- %x\n", dst, reg[dst]);
 #endif
 		break;
-	case LDI:
+	case LDB:
 		a = NEXT;
-		m = a >> 6;
-		dst = (a >> 3) & (0x7);
-		src_address = ram[reg[a & 0x7]];
-		if (m){
-			offset = LOAD;
-		}
-		else{
-			offset = reg[NEXT];
+		m = (a>>6) & 0x3;
+		dst = (a>>3) & 0x7;
+		switch(m){
+		case 0:
+			src_address = reg[a & 0x7] + reg[(NEXT) & 0x7];
+			reg[dst] = ram[src_address];
 			NEXT;
+			break;
+		case 1:
+			src_address = reg[a & 0x7]+(LOAD);
+			reg[dst] = ram[src_address];
+			break;
+		case 2:
+			reg[dst] = ram[LOAD];
+			break;
 		}
-		reg[dst] = READ(src_address+offset);
 #if (DEBUG == 1)
-		printf("LDI %u <- %u (%u + %u)\n", dst, reg[dst], src_address, offset);
+		printf("LDB %u <- %x\n", dst, reg[dst]);
 #endif
 		break;
 	case STR:
 		a = NEXT;
-		m = a >> 3;
-		src = a & 0x7;
-		dst_address = 0;
-		if (m){
+		m = (a>>6) & 0x3;
+		preserve = reg[(a>>3) & 0x7];
+		switch(m){
+		case 0:
+			dst_address = reg[a & 0x7]+reg[(NEXT)&0x7];
+			NEXT;
+			break;
+		case 1:
+			dst_address = reg[a & 0x7]+(LOAD);
+			break;
+		case 2:
 			dst_address = LOAD;
+			break;
 		}
-		else{
-			dst_address = ram[reg[NEXT]];
-			NEXT;
-		}
-		WRITE(dst_address, reg[src])
+		WRITE(dst_address, preserve)
 #if (DEBUG == 1)
-		printf("STR %u (%u) -> %u\n", src, reg[src], dst_address);
-#endif
-		break;
-	case STI:
-		a = NEXT;
-		m = a >> 6;
-		src = (a >> 3) & (0x7);
-		dst_address = reg[a & 0x7];
-		if (m){
-			offset = LOAD;
-		}
-		else{
-			offset = reg[NEXT];
-			NEXT;
-		}
-		WRITE(dst_address+offset, reg[src])
-#if (DEBUG == 1)
-		printf("STI %u (%u) -> %u (%u + %u)\n", src, reg[src], dst_address+offset, dst_address, offset);
+		printf("STR %u (%x) -> %x\n",(a>>3) & 0x7, preserve, dst_address);
 #endif
 		break;
 	case STB:
 		a = NEXT;
-		m = a >> 6;
-		src = (a >> 3) & (0x7);
-		dst_address = reg[a & 0x7];
-		if (m){
-			offset = LOAD;
-		}
-		else{
-			offset = reg[NEXT];
+		m = (a>>6) & 0x3;
+		preserve = reg[(a>>3) & 0x7];
+		switch(m){
+		case 0:
+			dst_address = reg[a & 0x7]+reg[(NEXT)&0x7];
 			NEXT;
+			break;
+		case 1:
+			dst_address = reg[a & 0x7]+(LOAD);
+			break;
+		case 2:
+			dst_address = LOAD;
+			break;
 		}
-		ram[dst_address+offset] = reg[src] & 0xFF;
+		ram[dst_address] = preserve & 0xFF;
 #if (DEBUG == 1)
-		printf("STB %u (%u) -> %u (%u + %u)\n", src, reg[src]&0xFF, dst_address+offset, dst_address, offset);
+		printf("STB %u (%x) -> %x\n",(a>>3) & 0x7, preserve & 0xFF, dst_address);
 #endif
 		break;
 	case ADD:
@@ -666,10 +664,10 @@ void push_2bytes(byte* encoded, size_t* const size, word address){
 		}
 }
 
-uint8_t parse_LDR(FILE* const fd, byte* encoded, size_t* const const size){
-	encoded[(*size)++] = LDR;
+uint8_t parse_LDW(FILE* const fd, byte* encoded, size_t* const size){
+	encoded[(*size)++] = LDW;
 #if (DEBUG==1)
-	printf("LDR ");
+	printf("LDW ");
 #endif
 	char c = parse_spaces(fd);
 	assert_return(c!=EOF)
@@ -679,49 +677,73 @@ uint8_t parse_LDR(FILE* const fd, byte* encoded, size_t* const const size){
 	c = parse_spaces(fd);
 	assert_return(c!=EOF)
 	if (c=='&'){
-		encoded[(*size)++] = r | (1<<3);
 		word address = parse_numeric(fd, &err);
 		assert_return(!err)
+		encoded[(*size)++] = (0x2 << 6) | (r << 3);
 		push_2bytes(encoded, size, address);
+		return 1;
 	}
 	else if (c=='#'){
-		encoded[(*size)++] = r;
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
+		encoded[(*size)++] = (0x3 << 6) | (r << 3);
 		push_2bytes(encoded, size, value);
+		return 1;
 	}
+	byte s = parse_register(fd, c, &err);
+	assert_return(!err)
+	c = parse_spaces(fd);
+	assert_return(c!=EOF && c!= '&')
+	if (c == '#'){
+		int32_t value = parse_numeric(fd, &err);
+		assert_return(!err)
+		encoded[(*size)++] = (0x1 << 6) | (r << 3);
+		push_2bytes(encoded, size, value);
+		return 1;
+	}
+	byte offset = parse_register(fd, c, &err);
+	assert_return(!err)
+	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = offset;
+	*size += 1;
 	return 1;
 }
 
-uint8_t parse_LDI(FILE* fd, byte* encoded, size_t* const size){
-	encoded[(*size)++] = LDI;
+uint8_t parse_LDB(FILE* const fd, byte* encoded, size_t* const size){
+	encoded[(*size)++] = LDB;
 #if (DEBUG==1)
-	printf("LDI ");
+	printf("LDB ");
 #endif
 	char c = parse_spaces(fd);
 	assert_return(c!=EOF)
 	uint8_t err = 0;
-	byte dst = parse_register(fd, c, &err);
+	byte r = parse_register(fd, c, &err);
 	assert_return(!err)
 	c = parse_spaces(fd);
-	assert_return(c!=EOF)
-	byte src = parse_register(fd, c, &err);
+	assert_return(c!=EOF && c!='#')
+	if (c=='&'){
+		word address = parse_numeric(fd, &err);
+		assert_return(!err)
+		encoded[(*size)++] = (0x2 << 6) | (r << 3);
+		push_2bytes(encoded, size, address);
+		return 1;
+	}
+	byte s = parse_register(fd, c, &err);
 	assert_return(!err)
 	c = parse_spaces(fd);
-	assert_return(c!=EOF)
-	if (c=='#'){
-		int32_t offset = parse_numeric(fd, &err);
+	assert_return(c!=EOF && c!= '&')
+	if (c == '#'){
+		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = (1<<6) | (dst << 3) | src;
-		push_2bytes(encoded, size, offset);
+		encoded[(*size)++] = (0x1 << 6) | (r << 3);
+		push_2bytes(encoded, size, value);
+		return 1;
 	}
-	else{
-		byte off = parse_register(fd, c, &err);
-		assert_return(!err)
-		encoded[(*size)++] = (dst << 3) | src;
-		encoded[(*size)++] = off;
-		*size += 1;
-	}
+	byte offset = parse_register(fd, c, &err);
+	assert_return(!err)
+	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = offset;
+	*size += 1;
 	return 1;
 }
 
@@ -733,55 +755,71 @@ uint8_t parse_STR(FILE* fd, byte* encoded, size_t* const size){
 	char c = parse_spaces(fd);
 	assert_return(c!=EOF)
 	uint8_t err = 0;
-	byte src = parse_register(fd, c, &err);
+	byte r = parse_register(fd, c, &err);
 	assert_return(!err)
 	c = parse_spaces(fd);
-	assert_return(c!=EOF)
-	if (c == '&'){
+	assert_return(c!=EOF && c!='#')
+	if (c=='&'){
+		word address = parse_numeric(fd, &err);
+		assert_return(!err)
+		encoded[(*size)++] = (0x2 << 6) | (r << 3);
+		push_2bytes(encoded, size, address);
+		return 1;
+	}
+	byte s = parse_register(fd, c, &err);
+	assert_return(!err)
+	c = parse_spaces(fd);
+	assert_return(c!=EOF && c!= '&')
+	if (c == '#'){
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = (1<<3) | src;
+		encoded[(*size)++] = (0x1 << 6) | (r << 3);
 		push_2bytes(encoded, size, value);
+		return 1;
 	}
-	else{
-		byte dst = parse_register(fd, c, &err);
-		assert_return(!err)
-		encoded[(*size)++] = src;
-		encoded[(*size)++] = dst;
-		*size += 1;
-	}
+	byte offset = parse_register(fd, c, &err);
+	assert_return(!err)
+	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = offset;
+	*size += 1;
 	return 1;
 }
 
-uint8_t parse_STI(FILE* fd, byte* encoded, size_t* const size){
+uint8_t parse_STB(FILE* fd, byte* encoded, size_t* const size){
+	encoded[(*size)++] = STB;
 #if (DEBUG==1)
-	printf("STI ");
+	printf("STB ");
 #endif
-	encoded[(*size)++] = STI;
 	char c = parse_spaces(fd);
 	assert_return(c!=EOF)
 	uint8_t err = 0;
-	byte src = parse_register(fd, c, &err);
+	byte r = parse_register(fd, c, &err);
 	assert_return(!err)
 	c = parse_spaces(fd);
-	assert_return(c!=EOF)
-	byte dst = parse_register(fd, c, &err);
+	assert_return(c!=EOF && c!='#')
+	if (c=='&'){
+		word address = parse_numeric(fd, &err);
+		assert_return(!err)
+		encoded[(*size)++] = (0x2 << 6) | (r << 3);
+		push_2bytes(encoded, size, address);
+		return 1;
+	}
+	byte s = parse_register(fd, c, &err);
 	assert_return(!err)
 	c = parse_spaces(fd);
-	assert_return(c!=EOF)
-	if (c=='#'){
-		int32_t offset = parse_numeric(fd, &err);
+	assert_return(c!=EOF && c!= '&')
+	if (c == '#'){
+		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = (1<<6) | (src << 3) | dst;
-		push_2bytes(encoded, size, offset);
+		encoded[(*size)++] = (0x1 << 6) | (r << 3);
+		push_2bytes(encoded, size, value);
+		return 1;
 	}
-	else{
-		byte off = parse_register(fd, c, &err);
-		assert_return(!err)
-		encoded[(*size)++] = (src << 3) | dst;
-		encoded[(*size)++] = off;
-		*size += 1;
-	}
+	byte offset = parse_register(fd, c, &err);
+	assert_return(!err)
+	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = offset;
+	*size += 1;
 	return 1;
 }
 
@@ -1188,10 +1226,10 @@ uint8_t parse_opcode(FILE* fd, char c, byte* encoded, size_t* const size, label_
 	}
 	assert_return(c!=EOF)
 	MATCH_OPCODE(NOP)
-	MATCH_OPCODE(LDR)
-	MATCH_OPCODE(LDI)
+	MATCH_OPCODE(LDW)
+	MATCH_OPCODE(LDB)
 	MATCH_OPCODE(STR)
-	MATCH_OPCODE(STI)
+	MATCH_OPCODE(STB)
 	MATCH_OPCODE(ADD)
 	MATCH_OPCODE(SUB)
 	MATCH_OPCODE(MUL)

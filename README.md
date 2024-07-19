@@ -10,6 +10,19 @@ Run the program rom with `-r output.rom`
 
     .----------------------------------------------,
 	| NOP |             |           |              |
+    | LDW | 00  dst src | 00000 ofs |              |
+	|     | 01  dst src | 2 byte ofs literal       |
+	|     | 10  dst     | 2 byte src address       |
+	|     | 11  dst     | 2 byte src literal       |
+	| LDB | 00  dst src | 00000 ofs |              |
+	|     | 01  dst src | 2 byte ofs literal       |
+	|     | 10  dst     | 2 byte src address       |
+	| STR | 00  src dst | 00000 ofs |              |
+	|     | 01  src dst | 2 byte ofs literal       |
+	|     | 10  src     | 2 byte dst address       |
+	| STB | 00  src dst | 00000 ofs |              |
+	|     | 01  src dst | 2 byte ofs literal       |
+	|     | 10  src     | 2 byte dst address       |
 	| LDR | 0000 m reg  | 2 byte address or int    |
 	| LDI | 0 m dst src | 2 byte int or reg offset |
 	| LDW | 0 m dst src | 2 byte int or reg offset |
