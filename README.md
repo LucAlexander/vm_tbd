@@ -30,6 +30,8 @@ Run the program rom with `-r output.rom`
 	| STI | 0 m src dst | 2 byte int or reg offset |
 	| STB | 0 m src dst | 2 byte int or reg offset |
     |-----+-------------+--------------------------|
+	| LAR |         dst | 4 bit src |              |
+    |-----+-------------+--------------------------|
 	| ADD | 0 m dst op1 | 2 byte int or reg op2    |
 	| SUB | ...         | ...                      |
 	| MUL | ...         | ...                      |

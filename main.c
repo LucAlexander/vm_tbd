@@ -17,6 +17,7 @@ enum {
 	R6,
 	R7,
 	ST,
+	FP,
 	PC,
 	SR, //-zs- 4th, 1st bit unused for now
 	REGISTER_COUNT
@@ -39,6 +40,7 @@ enum {
 	STB,//  00  src dst | 00000 ofs |            |
 		//  01  src dst | 2 byte ofs literal     |
 		//  10  src     | 2 byte dst address     |
+	LAR,//          dst | 4 bit src |            |
 	ADD,//  0 m dst op1 | 2 byte int or reg op2  |
 	SUB,//  ...         | ...                    |
 	MUL,//  ...         | ...                    |
@@ -116,7 +118,7 @@ void stack_push(word value){
 	for (uint8_t i = 0;i<4;++i){
 		ram[reg[ST]--] = (value >> (0x8*i)) & 0xFF;
 #if (DEBUG == 1)
-		printf("%u\n", ram[reg[ST]+1]);
+		printf("push [%x] ]%u\n", reg[ST]+1, ram[reg[ST]+1]);
 #endif
 	}
 }
@@ -125,7 +127,7 @@ word stack_pop(){
 	word v = 0;
 	for (uint8_t i = 0;i<4;++i){
 #if (DEBUG == 1)
-		printf("%u: %u\n", reg[ST]+1, ram[reg[ST]+1]);
+		printf("pop [%x]: %u\n", reg[ST]+1, ram[reg[ST]+1]);
 #endif
 		v += ram[++reg[ST]] << (0x8*(3-i));
 	}
@@ -216,6 +218,9 @@ void progress(){
 			break;
 		case 1:
 			src_address = reg[a & 0x7]+(LOAD);
+#if (DEBUG == 1)
+		printf("%x offset from %u (%x)\n", src_address, a&0x7, reg[a&0x7]);
+#endif
 			LOAD_WORD(dst, src_address)
 			break;
 		case 2:
@@ -292,6 +297,15 @@ void progress(){
 		ram[dst_address] = preserve & 0xFF;
 #if (DEBUG == 1)
 		printf("STB %u (%x) -> %x\n",(a>>3) & 0x7, preserve & 0xFF, dst_address);
+#endif
+		break;
+	case LAR:
+		dst = NEXT;
+		src = NEXT;
+		NEXT;
+		reg[dst] = reg[src];
+#if (DEBUG == 1)
+		printf("LAR %u <- %u(%x)\n", dst, src, reg[src]);
 #endif
 		break;
 	case ADD:
@@ -490,10 +504,10 @@ void progress(){
 		else{
 			src_val = LOAD;
 		}
-		stack_push(src_val);
 #if (DEBUG == 1)
-		printf("PSH %u\n", src_val);
+		printf("PSH [%x] <- %u\n", reg[ST], src_val);
 #endif
+		stack_push(src_val);
 		break;
 	case POP:
 		a = NEXT;
@@ -521,7 +535,9 @@ void progress(){
 		printf("JMP\n");
 #endif
 		if (check_metric(NEXT & 0x7)){
+			stack_push(reg[FP]);
 			stack_push(reg[PC]+2);
+			reg[FP] = reg[ST];
 			reg[PC] = LOAD;
 			break;
 		}
@@ -529,7 +545,9 @@ void progress(){
 		NEXT;
 		break;
 	case RET:
+		reg[ST] = reg[FP];
 		reg[PC] = stack_pop();
+		reg[FP] = stack_pop();
 #if (DEBUG == 1)
 		printf("RET -> %u\n", reg[PC]);
 #endif
@@ -565,6 +583,7 @@ void load_rom(word address, size_t len){
 void run_rom(uint8_t debug){
 	reg[PC] = PROG_ADDRESS;
 	reg[ST] = RAM_SIZE-1;
+	reg[FP] = reg[ST];
 	while (reg[PC] != PROG_END) {
 		if (debug){getc(stdin);}
 		progress();
@@ -592,6 +611,26 @@ char parse_spaces(FILE* fd){
 
 #define MATCH_REGISTER(tok) if (strcmp(#tok, r)==0){ return tok; } else
 
+byte parse_aux_register(FILE* fd, char c, uint8_t* err){
+	char r[] = "..";
+	uint8_t i = 0;
+	while (c != EOF && i < 2){
+		r[i++] = c;
+		c = fgetc(fd);
+	}
+	assert_error(c!=EOF)
+#if (DEBUG==1)
+	printf("%s ", r);
+#endif
+	MATCH_REGISTER(ST)
+	MATCH_REGISTER(SR)
+	MATCH_REGISTER(FP)
+	{
+		*err = 1;
+		return 0;
+	}
+}
+
 byte parse_register(FILE* fd, char c, uint8_t* err){
 	char r[] = "..";
 	uint8_t i = 0;
@@ -611,8 +650,6 @@ byte parse_register(FILE* fd, char c, uint8_t* err){
 	MATCH_REGISTER(R5)
 	MATCH_REGISTER(R6)
 	MATCH_REGISTER(R7)
-	MATCH_REGISTER(ST)
-	MATCH_REGISTER(SR)
 	{
 		*err = 1;
 		return 0;
@@ -664,6 +701,26 @@ void push_2bytes(byte* encoded, size_t* const size, word address){
 		}
 }
 
+uint8_t parse_LAR(FILE* const fd, byte* encoded, size_t* const size){
+	encoded[(*size)++] = LAR;
+#if (DEBUG==1)
+	printf("LAR ");
+#endif
+	char c = parse_spaces(fd);
+	assert_return(c!=EOF)
+	uint8_t err = 0;
+	byte r = parse_register(fd, c, &err);
+	assert_return(!err)
+	c = parse_spaces(fd);
+	assert_return(c!=EOF)
+	byte s = parse_aux_register(fd, c, &err);
+	assert_return(!err)
+	encoded[(*size)++] = r;
+	encoded[(*size)++] = s;
+	*size += 1;
+	return 1;
+}
+
 uint8_t parse_LDW(FILE* const fd, byte* encoded, size_t* const size){
 	encoded[(*size)++] = LDW;
 #if (DEBUG==1)
@@ -697,13 +754,13 @@ uint8_t parse_LDW(FILE* const fd, byte* encoded, size_t* const size){
 	if (c == '#'){
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = (0x1 << 6) | (r << 3);
+		encoded[(*size)++] = (0x1 << 6) | (r << 3) | s;
 		push_2bytes(encoded, size, value);
 		return 1;
 	}
 	byte offset = parse_register(fd, c, &err);
 	assert_return(!err)
-	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = (r<<3) | s;
 	encoded[(*size)++] = offset;
 	*size += 1;
 	return 1;
@@ -735,13 +792,13 @@ uint8_t parse_LDB(FILE* const fd, byte* encoded, size_t* const size){
 	if (c == '#'){
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = (0x1 << 6) | (r << 3);
+		encoded[(*size)++] = (0x1 << 6) | (r << 3) | s;
 		push_2bytes(encoded, size, value);
 		return 1;
 	}
 	byte offset = parse_register(fd, c, &err);
 	assert_return(!err)
-	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = (r<<3) | s;
 	encoded[(*size)++] = offset;
 	*size += 1;
 	return 1;
@@ -773,13 +830,13 @@ uint8_t parse_STR(FILE* fd, byte* encoded, size_t* const size){
 	if (c == '#'){
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = (0x1 << 6) | (r << 3);
+		encoded[(*size)++] = (0x1 << 6) | (r << 3) | s;
 		push_2bytes(encoded, size, value);
 		return 1;
 	}
 	byte offset = parse_register(fd, c, &err);
 	assert_return(!err)
-	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = (r<<3) | s;
 	encoded[(*size)++] = offset;
 	*size += 1;
 	return 1;
@@ -811,13 +868,13 @@ uint8_t parse_STB(FILE* fd, byte* encoded, size_t* const size){
 	if (c == '#'){
 		int32_t value = parse_numeric(fd, &err);
 		assert_return(!err)
-		encoded[(*size)++] = (0x1 << 6) | (r << 3);
+		encoded[(*size)++] = (0x1 << 6) | (r << 3) | s;
 		push_2bytes(encoded, size, value);
 		return 1;
 	}
 	byte offset = parse_register(fd, c, &err);
 	assert_return(!err)
-	encoded[(*size)++] = (r<<3);
+	encoded[(*size)++] = (r<<3) | s;
 	encoded[(*size)++] = offset;
 	*size += 1;
 	return 1;
@@ -1230,6 +1287,7 @@ uint8_t parse_opcode(FILE* fd, char c, byte* encoded, size_t* const size, label_
 	MATCH_OPCODE(LDB)
 	MATCH_OPCODE(STR)
 	MATCH_OPCODE(STB)
+	MATCH_OPCODE(LAR)
 	MATCH_OPCODE(ADD)
 	MATCH_OPCODE(SUB)
 	MATCH_OPCODE(MUL)
