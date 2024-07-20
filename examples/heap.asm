@@ -8,8 +8,8 @@ exit:
 aloc:
 	LAR	R2	FP
 	ADD	R2	R2	#x1
-	LDW	R0	R2	#x8	; heap base
-	LDW	R1	R2	#xc	; number of bytes
+	LDW	R1	R2	#x8	; heap base
+	LDW	R0	R2	#xc	; number of bytes
 	LAR	R2	ST
 	LDW R3	R0	#0	; dereference base to find heap size
 	ADD	R5	R3	R1	; get new heap size
@@ -32,5 +32,12 @@ main:
 	PSH	R1
 	JSR	NC	aloc	; heap allocation request
 	POP	R0			; returns address of new memory
+
+	LDW	R0	#x200
+	LDW	R1	#1
+	PSH	R0
+	PSH	R1
+	JSR	NC	aloc
+	POP	R0
 
 	INT	END
