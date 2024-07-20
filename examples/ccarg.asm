@@ -5,7 +5,8 @@ add:
 	ADD	R1	R1	#x1
 	LDW R3	R1	#x8
 	LDW R2	R1	#xc
-	ADD R0	R3	R2
+	ADD R2	R3	R2
+	PSH R2
 	RET
 
 main:
@@ -14,5 +15,6 @@ main:
 	PSH	R0
 	PSH	R1
 	JMP	NC	add
+	POP R0
 	INT	END
 

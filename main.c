@@ -545,9 +545,11 @@ void progress(){
 		NEXT;
 		break;
 	case RET:
+		x = stack_pop();
 		reg[ST] = reg[FP];
 		reg[PC] = stack_pop();
 		reg[FP] = stack_pop();
+		stack_push(x);
 #if (DEBUG == 1)
 		printf("RET -> %u\n", reg[PC]);
 #endif

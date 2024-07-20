@@ -8,8 +8,11 @@ Run the program rom with `-r output.rom`
 
 ## Instruction set
 
-    .----------------------------------------------,
+
+    
+    ,----------------------------------------------.
 	| NOP |             |           |              |
+    |-----+-------------+-----------+--------------|
     | LDW | 00  dst src | 00000 ofs |              |
 	|     | 01  dst src | 2 byte ofs literal       |
 	|     | 10  dst     | 2 byte src address       |
@@ -23,15 +26,9 @@ Run the program rom with `-r output.rom`
 	| STB | 00  src dst | 00000 ofs |              |
 	|     | 01  src dst | 2 byte ofs literal       |
 	|     | 10  src     | 2 byte dst address       |
-	| LDR | 0000 m reg  | 2 byte address or int    |
-	| LDI | 0 m dst src | 2 byte int or reg offset |
-	| LDW | 0 m dst src | 2 byte int or reg offset |
-	| STR | 0000 m reg  | 2 byte address or reg    |
-	| STI | 0 m src dst | 2 byte int or reg offset |
-	| STB | 0 m src dst | 2 byte int or reg offset |
-    |-----+-------------+--------------------------|
-	| LAR |         dst | 4 bit src |              |
-    |-----+-------------+--------------------------|
+    |-----+-------------+-----------+--------------|
+	| LAR | 00000   dst | 4 bit src |              |
+    |-----+-------------+-----------+--------------|
 	| ADD | 0 m dst op1 | 2 byte int or reg op2    |
 	| SUB | ...         | ...                      |
 	| MUL | ...         | ...                      |
@@ -42,6 +39,7 @@ Run the program rom with `-r output.rom`
     | AND | ...         | ...                      |
     | ORR | ...         | ...                      |
     | XOR | ...         | ...                      |
+    |-----+-------------+--------------------------|
     | COM | 0000 m reg  | 2 byte literal or reg    |
     |-----+-------------+--------------------------|
 	| PSH | 0000 m reg  | 2 byte literal           |
@@ -78,27 +76,31 @@ Run the program rom with `-r output.rom`
 All the responsibility of cleanup lies within the called procedure.
 
 ```asm
+
+	LDW R0 #5
+	LDW R1 #6
+	PSH R0        ; push arg 1
+	PSH R1        ; push arg 2
+	JMP NC add    ; jump to subroutine
+	POP R0        ; retrieve return value
+	INT END
+
 add:
-	POP R3          ; pop PC
-	POP R4          ; get arg 1
-	POP R5          ; get arg 0
-	ADD R6 R4 R5    ; do functionality for procedure
-	PSH R6          ; push procedure return
-	PSH R3          ; push PC back onto stack for return
-	RET             ; pop and jump to program counter
-
-
-    LDR R0 #65      
-	PSH R0          ; push arg0 
-	PSH #x10        ; push arg 1
-	JMP NC add      ; invoke procedure with no condition (NC)
-	POP R0          ; get procedures return value
+	LAR R1 FP     ; load auxiliary register (frame pointer)
+	ADD R1 R1 #x1 ; add 1 to get previous element in stack
+	LDW R3 R1 #x8 ; load stack address offset 8 bytes from the frame pointer (arg 2)
+	LDW R2 R1 #xc ; load stack address offset 12 bytes from the grame pointer (arg 1)
+	ADD R2 R3 R2  ; function body
+	PSH R2        ; push return value
+	RET           ; return to previous stack frame
 
 ```
 
 Invoking interrupts requires loading arguments into registers.
 
 ```asm
-	LDR R0 #0       ; load program return code
+
+	LDW R0 #0       ; load program rom return code
 	INT END         ; call interrupt to end program
+
 ```
