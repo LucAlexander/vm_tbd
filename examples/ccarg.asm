@@ -14,7 +14,7 @@ main:
 	LDW R1	#6
 	PSH	R0
 	PSH	R1
-	JMP	NC	add
+	JSR	NC	add
 	POP R0
 	INT	END
 

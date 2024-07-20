@@ -56,6 +56,7 @@ enum {
 	POP,//  00000 reg   |           |            |
 	CMP,//  00000 op1   | 00000 op2 |            |
 	JMP,//  metric byte | 2 byte label address   |
+	JSR,//  metric byte | 2 byte label address   |
 	RET,//  pop to pc                            |
 	INT//   interrupt   |           |            |
 };
@@ -532,7 +533,18 @@ void progress(){
 		break;
 	case JMP:
 #if (DEBUG == 1)
-		printf("JMP\n");
+		printf("JSR\n");
+#endif
+		if (check_metric(NEXT & 0x7)){
+			reg[PC] = LOAD;
+			break;
+		}
+		NEXT;
+		NEXT;
+		break;
+	case JSR:
+#if (DEBUG == 1)
+		printf("JSR\n");
 #endif
 		if (check_metric(NEXT & 0x7)){
 			stack_push(reg[FP]);
@@ -1142,6 +1154,29 @@ uint32_t seek_jump_label(label_assoc** labels, char* lab, size_t ip){
 	return 0;
 }
 
+uint8_t parse_JSR(FILE* fd, byte* encoded, size_t* const size, label_assoc** labels){
+#if (DEBUG==1)
+	printf("JSR ");
+#endif
+	encoded[(*size)++] = JSR;
+	char c = parse_spaces(fd);
+	assert_return(c!=EOF)
+	assert_return(parse_metric(fd, c, encoded, size))
+	c = parse_spaces(fd);
+	assert_return(c!=EOF)
+	char lab[8] = "labelMax";
+	size_t i = 0;
+	while (c!=EOF && i<8 && !whitespace(c)){
+		lab[i++] = c;
+		c = fgetc(fd);
+	}
+	assert_return(whitespace(c));
+	lab[i] = '\0';
+	word label = seek_jump_label(labels, lab, *size);
+	push_2bytes(encoded, size, label);
+	return 1;
+}
+
 uint8_t parse_JMP(FILE* fd, byte* encoded, size_t* const size, label_assoc** labels){
 #if (DEBUG==1)
 	printf("JMP ");
@@ -1308,6 +1343,9 @@ uint8_t parse_opcode(FILE* fd, char c, byte* encoded, size_t* const size, label_
 	MATCH_OPCODE(INT)
 	if (strcmp("JMP", op)==0){
 		return parse_JMP(fd, encoded, size, labels);
+	}
+	else if (strcmp("JSR", op)==0){
+		return parse_JSR(fd, encoded, size, labels);
 	}
 	else {
 		return parse_label(fd, c, encoded, size, op, labels);

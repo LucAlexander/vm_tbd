@@ -46,6 +46,7 @@ Run the program rom with `-r output.rom`
     | POP | 00000 reg   |           |              |
     | CMP | 00000 op1   | 00000 op2 |              |
     | JMP | metric byte | 2 byte label address     |
+    | JSR | metric byte | 2 byte label address     |
     | RET |             |           |              |
     | INT | interrupt   |           |              |
     `----------------------------------------------'
@@ -81,7 +82,7 @@ All the responsibility of cleanup lies within the called procedure.
 	LDW R1 #6
 	PSH R0        ; push arg 1
 	PSH R1        ; push arg 2
-	JMP NC add    ; jump to subroutine
+	JSR NC add    ; jump to subroutine
 	POP R0        ; retrieve return value
 	INT END
 
@@ -89,7 +90,7 @@ add:
 	LAR R1 FP     ; load auxiliary register (frame pointer)
 	ADD R1 R1 #x1 ; add 1 to get previous element in stack
 	LDW R3 R1 #x8 ; load stack address offset 8 bytes from the frame pointer (arg 2)
-	LDW R2 R1 #xc ; load stack address offset 12 bytes from the grame pointer (arg 1)
+	LDW R2 R1 #xc ; load stack address offset 12 bytes from the frame pointer (arg 1)
 	ADD R2 R3 R2  ; function body
 	PSH R2        ; push return value
 	RET           ; return to previous stack frame
