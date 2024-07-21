@@ -594,12 +594,65 @@ void load_rom(word address, size_t len){
 	}
 }
 
+#define DISPLAY_REG(r) printf("[%s]: %x (%u)\033[0m\n", #r, reg[r], reg[r])
+
+void display_machine(){
+	printf("\033[2J");
+	printf("\033[H\033[1m");
+	word offset = 64;
+	if (PROG_END-reg[PC] < offset){
+		offset = PROG_END-reg[PC];
+	}
+	printf("                                                                    Program Counter\033[0m\n");
+	for (word adr = reg[PC];adr < reg[PC]+offset;adr+=4){
+		if (adr==reg[PC]){
+			printf("\033[1;33m");
+		}
+		printf("                                                                    [%x]: ", adr);
+		for (uint8_t i = 0;i<4;++i){
+			printf("%02x ", ram[adr+i]);
+		}
+		printf("\033[0m\n");
+	}
+	printf("\033[H\033[1m");
+	offset = 64;
+	if (reg[ST] >  RAM_SIZE - offset){
+		offset = RAM_SIZE-reg[ST];
+	}
+	printf("                              Stack\033[0m\n");
+	for (word adr = reg[ST]+offset;adr >= reg[ST];--adr){
+		if (adr==reg[FP]){
+			printf("\033[1;32m");
+		}
+		printf("                              [%x]: %x\033[0m\n", adr, ram[adr]);
+	}
+	printf("\033[H\033[1m");
+	printf("CPU Registers\033[0m\n");
+	DISPLAY_REG(R0);
+	DISPLAY_REG(R1);
+	DISPLAY_REG(R2);
+	DISPLAY_REG(R3);
+	DISPLAY_REG(R4);
+	DISPLAY_REG(R5);
+	DISPLAY_REG(R6);
+	DISPLAY_REG(R7);
+	DISPLAY_REG(ST);
+	printf("\033[1;32m");
+	DISPLAY_REG(FP);
+	printf("\033[1;33m");
+	DISPLAY_REG(PC);
+	DISPLAY_REG(SR);
+}
+
 void run_rom(uint8_t debug){
 	reg[PC] = PROG_ADDRESS;
 	reg[ST] = RAM_SIZE-1;
 	reg[FP] = reg[ST];
 	while (reg[PC] != PROG_END) {
-		if (debug){getc(stdin);}
+		if (debug){
+			getc(stdin);
+			display_machine();
+		}
 		progress();
 	}
 	printf("INFO rom exited with code %x\n", stack_pop());
