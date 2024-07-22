@@ -1415,6 +1415,45 @@ void free_label_assoc(label_assoc* list){
 	free(list);
 }
 
+uint8_t parse_body(FILE* fd, char c, byte* encoded, size_t* const size, label_assoc** label_list){
+	while (c != EOF){
+		if (whitespace(c)){
+			c = parse_spaces(fd);
+		}
+		if (c==EOF){
+			break;
+		}
+		if (!parse_opcode(fd, c, encoded, size, label_list)){
+			printf("failed to parse instruction\n");
+			fclose(fd);
+			return 0;
+		}
+		c = fgetc(fd);
+	}
+	fclose(fd);
+	return 1;
+}
+
+uint8_t parse_include(FILE* fd, byte* encoded, size_t* const size, label_assoc** label_list){
+	char filename[] = "################.asm";
+	size_t index = 0;
+	char c = fgetc(fd);
+	while ((!whitespace(c)) && index < 16){
+		filename[index++] = c;
+		assert_return(c!=EOF)
+		c = fgetc(fd);
+	}
+	filename[index++] = '.';
+	filename[index++] = 'a';
+	filename[index++] = 's';
+	filename[index++] = 'm';
+	filename[index++] = '\0';
+	printf("%s\n", filename);
+	FILE* new_fd = fopen(filename, "r");
+	assert_return(new_fd!=NULL)
+	return parse_body(new_fd, fgetc(new_fd), encoded, size, label_list);
+}
+
 uint8_t assembler(int32_t argc, char** argv){
 #if (DEBUG==1)
 	printf("Assembler symbols:\n");
@@ -1425,18 +1464,18 @@ uint8_t assembler(int32_t argc, char** argv){
 	byte encoded[PROG_SIZE] = {0};
 	label_assoc* label_list = NULL;
 	size_t size = 0;
-	char c;
-	do {
+	char c = fgetc(fd);
+	while(c=='+'){
+		if (!parse_include(fd, encoded, &size, &label_list)){
+			printf("failed to parse inclusion\n");
+			break;
+		}
 		c = parse_spaces(fd);
 		if (c==EOF){
 			break;
 		}
-		if (!parse_opcode(fd, c, encoded, &size, &label_list)){
-			printf("failed to parse instruction\n");
-			break;
-		}
-	} while (c != EOF);
-	fclose(fd);
+	}
+	parse_body(fd, c, encoded, &size, &label_list);
 	free_label_assoc(label_list);
 	for (size_t i = 0;i<size;++i){
 		printf("%.2x ", encoded[i]);
