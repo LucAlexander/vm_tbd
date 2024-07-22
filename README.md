@@ -63,16 +63,7 @@ Run the program rom with `-r output.rom`
     | GE | Greater Equal |
     `--------------------'
 
-## Interrupts
-
-    .-------------------------------------------------------------------,
-    | OUT | Print ascii string to stdout | R0 <- address, R1 <- length  |
-    | KBD | Get keyboard key status      | (unimplemented)              |
-    | END | End the program and return   | R0 <- process return code    |
-    `-------------------------------------------------------------------'
- 
-
-# Calling convention
+## Calling convention
 
 All the responsibility of cleanup lies within the called procedure.
 
@@ -96,6 +87,27 @@ add:
 	RET           ; return to previous stack frame
 
 ```
+
+## Inclusion
+
+At the top of your assembled file, you can include other files to paste in to be assembled in that order.
+
+```asm
++examples/heap
+
+```
+
+Due to simple oversight, this is not recursive (yet).
+
+## Interrupts
+
+    .-------------------------------------------------------------------,
+    | OUT | Print ascii string to stdout | R0 <- address, R1 <- length  |
+    | KBD | Get keyboard key status      | (unimplemented)              |
+    | END | End the program and return   | R0 <- process return code    |
+    `-------------------------------------------------------------------'
+ 
+
 
 Invoking interrupts requires loading arguments into registers.
 
