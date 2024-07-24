@@ -97,8 +97,6 @@ At the top of your assembled file, you can include other files to paste in to be
 
 ```
 
-Due to simple oversight, this is not recursive (yet).
-
 ## Interrupts
 
     .-------------------------------------------------------------------,
