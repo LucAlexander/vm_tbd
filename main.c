@@ -1415,7 +1415,20 @@ void free_label_assoc(label_assoc* list){
 	free(list);
 }
 
-uint8_t parse_body(FILE* fd, char c, byte* encoded, size_t* const size, label_assoc** label_list){
+uint8_t parse_include(FILE* fd, byte* encoded, size_t* const size, label_assoc** label_list);
+
+uint8_t parse_body(FILE* fd, byte* encoded, size_t* const size, label_assoc** label_list){
+	char c = fgetc(fd);
+	while(c=='+'){
+		if (!parse_include(fd, encoded, size, label_list)){
+			printf("failed to parse inclusion\n");
+			break;
+		}
+		c = parse_spaces(fd);
+		if (c==EOF){
+			break;
+		}
+	}
 	while (c != EOF){
 		if (whitespace(c)){
 			c = parse_spaces(fd);
@@ -1451,7 +1464,7 @@ uint8_t parse_include(FILE* fd, byte* encoded, size_t* const size, label_assoc**
 	printf("%s\n", filename);
 	FILE* new_fd = fopen(filename, "r");
 	assert_return(new_fd!=NULL)
-	return parse_body(new_fd, fgetc(new_fd), encoded, size, label_list);
+	return parse_body(new_fd, encoded, size, label_list);
 }
 
 uint8_t assembler(int32_t argc, char** argv){
@@ -1464,18 +1477,7 @@ uint8_t assembler(int32_t argc, char** argv){
 	byte encoded[PROG_SIZE] = {0};
 	label_assoc* label_list = NULL;
 	size_t size = 0;
-	char c = fgetc(fd);
-	while(c=='+'){
-		if (!parse_include(fd, encoded, &size, &label_list)){
-			printf("failed to parse inclusion\n");
-			break;
-		}
-		c = parse_spaces(fd);
-		if (c==EOF){
-			break;
-		}
-	}
-	parse_body(fd, c, encoded, &size, &label_list);
+	parse_body(fd, encoded, &size, &label_list);
 	free_label_assoc(label_list);
 	for (size_t i = 0;i<size;++i){
 		printf("%.2x ", encoded[i]);
