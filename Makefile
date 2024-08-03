@@ -1,3 +1,3 @@
 compile:
 	clear
-	gcc main.c -g -o vm
+	gcc main.c -lSDL2 -lSDL2main -g -o vm

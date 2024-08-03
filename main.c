@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 
+#include <SDL2/SDL.h>
+
 #define DEBUG 0
 
 // registers
@@ -90,14 +92,25 @@ typedef struct label_assoc{
 	struct label_assoc* other;
 }label_assoc;
 
-#define RAM_SIZE 0x10000
+#define PROG_ADDRESS 0x0
+#define PROG_SIZE 0x100000
+#define PROG_END PROG_ADDRESS+PROG_SIZE
+#define DEV_COUNT 0x8
+#define DEV_SIZE 0x8
+/* Device layout
+ * Device Size (Word)
+ * Device Pointer (3 Bytes)
+ * Device Type (Byte)
+ */
+#define DEV_END	(DEV_COUNT*DEV_SIZE)+PROG_END
+#define RAM_START DEV_END
+#define RAM_SIZE 0xA00000
+#define RAM_END RAM_START+RAM_SIZE
+#define DEV_MEM 0x4000000
+#define MEM_SIZE RAM_END+DEV_MEM
 
 static word reg[REGISTER_COUNT];
-static byte ram[RAM_SIZE];
-
-#define PROG_ADDRESS 0x0
-#define PROG_SIZE 0x1000
-#define PROG_END PROG_ADDRESS+PROG_SIZE
+static byte ram[MEM_SIZE];
 
 #define NEXT ram[reg[PC]++]
 #define LOAD ((NEXT<<8) + (NEXT))
@@ -107,6 +120,7 @@ static byte ram[RAM_SIZE];
 	ram[addr+1] = (val>>16) & (0xFF);\
 	ram[addr+2] = (val>>8) & (0xFF);\
 	ram[addr+3] = (val) & (0xFF);\
+
 
 #define LOAD_WORD(r, addr)\
 	reg[r] = ((ram[addr] << 24)\
@@ -1496,6 +1510,11 @@ uint8_t run_rom_image(int32_t argc, char** argv){
 #if (DEBUG==1)
 	printf("symbols:\n");
 #endif
+	SDL_Window* window;
+	SDL_Renderer* renderer;
+	SDL_CreateWindowAndRenderer(512, 512, SDL_WINDOW_OPENGL, &window, &renderer);
+	SDL_SetWindowTitle(window, "VM");
+	SDL_Init(SDL_INIT_EVERYTHING);
 	assert_return(argc >= 3)
 	FILE* fd = fopen(argv[2], "rb");
 	assert_return(fd!=NULL)
@@ -1509,10 +1528,14 @@ uint8_t run_rom_image(int32_t argc, char** argv){
 		}
 	}
 	run_rom(debug);
+	SDL_DestroyWindow(window);
+	SDL_DestroyRenderer(renderer);
+	SDL_Quit();
 	fclose(fd);
 }
 
 int main(int32_t argc, char** argv){
+	printf("%x\n", RAM_START);
 	if (argc < 2){
 		printf("Please provide arguments\n-a input.asm -o output.rom\n-r image.rom\n");
 		return 0;
