@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stddef.h>
 
+#include <devices.h>
 #include <SDL2/SDL.h>
 
 #define DEBUG 0
@@ -99,8 +100,8 @@ typedef struct label_assoc{
 #define DEV_SIZE 0x8
 /* Device layout
  * Device Size (Word)
- * Device Pointer (3 Bytes)
  * Device Type (Byte)
+ * Device Pointer (3 Bytes)
  */
 #define DEV_END	(DEV_COUNT*DEV_SIZE)+PROG_END
 #define RAM_START DEV_END
@@ -1506,10 +1507,35 @@ uint8_t assembler(int32_t argc, char** argv){
 	fclose(outfile);
 }
 
+uint8_t setup_devices(){
+	word address = RAM_END;
+	for (int i = 0;i<DEV_COUNT;++i){
+		word device_ptr = PROG_END+(i*DEV_SIZE);
+		word size = 0;
+		switch (device_config[i].type){
+		case DEV_NONE:
+		default:
+			return;
+		case DEV_SCREEN:
+			size = device_config[i].data.screen.w*device_config[i].data.screen.h;
+		case DEV_KEYBOARD:
+			size = device_config[i].data.keyboard.keys;
+		case DEV_MOUSE:
+			size = 8;
+		}
+		assert_return(address + size < MEM_SIZE)
+		WRITE(device_ptr, size)
+		word location = address | (device_config[i].type << 24);
+		WRITE(device_ptr+4, location)
+		address += size;
+	}
+}
+
 uint8_t run_rom_image(int32_t argc, char** argv){
 #if (DEBUG==1)
 	printf("symbols:\n");
 #endif
+	assert_return(setup_devices())
 	SDL_Window* window;
 	SDL_Renderer* renderer;
 	SDL_CreateWindowAndRenderer(512, 512, SDL_WINDOW_OPENGL, &window, &renderer);
